@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "NtnRecord": {
+      "title": "NTN Record",
+      "description": "A record containing NTN and company details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ref": { "type": "string" },
+        "name": { "type": "string" },
+        "ntn": { "type": "string" },
+        "cnic": { "type": "string" },
+        "status": { "type": "string" },
+        "color": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ref", "name", "ntn", "userId"]
+    },
+    "HsCodeRecord": {
+      "title": "HS Code Record",
+      "description": "A record containing HS code and tracking details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tracking": { "type": "string" },
+        "shipper": { "type": "string" },
+        "hs": { "type": "string" },
+        "ceCode": { "type": "string" },
+        "service": { "type": "string" },
+        "color": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tracking", "shipper", "hs", "userId"]
+    },
+    "GenericRecord": {
+      "title": "Generic Record",
+      "description": "A generic record for missing, auto-update, bucket shop, or different lines",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "tracking": { "type": "string" },
+        "company": { "type": "string" },
+        "name": { "type": "string" },
+        "service": { "type": "string" },
+        "ntn": { "type": "string" },
+        "status": { "type": "string" },
+        "addr": { "type": "string" },
+        "color": { "type": "string" },
+        "userId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tracking", "userId"]
+    }
+  },
+  "firestore": {
+    "/ntn_records/{recordId}": {
+      "schema": "NtnRecord",
+      "description": "Collection of NTN records"
+    },
+    "/hs_code_records/{recordId}": {
+      "schema": "HsCodeRecord",
+      "description": "Collection of HS code records"
+    },
+    "/missing_records/{recordId}": {
+      "schema": "GenericRecord",
+      "description": "Collection of missing NTN records"
+    },
+    "/auto_update_records/{recordId}": {
+      "schema": "GenericRecord",
+      "description": "Collection of auto-update records"
+    },
+    "/bucket_shop_records/{recordId}": {
+      "schema": "GenericRecord",
+      "description": "Collection of bucket shop records"
+    },
+    "/different_lines_records/{recordId}": {
+      "schema": "GenericRecord",
+      "description": "Collection of different lines records"
+    }
+  }
+}
