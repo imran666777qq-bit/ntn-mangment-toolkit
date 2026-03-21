@@ -3,6 +3,14 @@ import { motion, AnimatePresence } from 'motion/react';
 import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { 
+  collection, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, doc, 
+  serverTimestamp, writeBatch, orderBy, getDocs
+} from 'firebase/firestore';
+import { 
+  onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut 
+} from 'firebase/auth';
+import { db, auth } from './firebase';
+import { 
   User, Lock, Eye, EyeOff, ChevronRight, Package, LogOut, LayoutDashboard, 
   Truck, Settings, AlertCircle, CheckCircle2, Search, FileCode, RefreshCw, 
   Store, Layers, Bell, ChevronDown, FileText, BarChart3, AlertTriangle,
@@ -69,11 +77,21 @@ function AppContent() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [user, setUser] = useState<any>(mockUser);
+  const [user, setUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [activeTab, setActiveTab] = useState('Dashboard');
+
+  // Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
   const [showScreenLock, setShowScreenLock] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showLogoutDropdown, setShowLogoutDropdown] = useState(false);
@@ -129,29 +147,81 @@ function AppContent() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editProfileData, setEditProfileData] = useState({ ...profile });
 
+  const getCollectionName = (tab: string) => {
+    switch (tab) {
+      case 'HS Code': return 'hs_code_records';
+      case 'NTN Missing': return 'missing_records';
+      case 'Auto Update': return 'auto_update_records';
+      case 'Bucket Shop': return 'bucket_shop_records';
+      case 'Different Lines': return 'different_lines_records';
+      default: return 'ntn_records';
+    }
+  };
+
   const handleSaveProfile = () => {
     setProfile({ ...editProfileData });
     setIsEditingProfile(false);
     setSuccessMessage('Profile updated successfully!');
     setTimeout(() => setSuccessMessage(''), 3000);
   };
-  const [ntnRecords, setNtnRecords] = useState<any[]>(() => {
-    const saved = localStorage.getItem('ntnRecords');
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: '1', ref: '8601', name: 'ABC Pvt Ltd', ntn: '42301-1234567-1', cnic: '35202-9876543-1', status: 'Active', color: 'emerald' },
-      { id: '2', ref: '8495', name: 'XYZ Traders', ntn: '42301-7654321-2', cnic: '35202-1234567-2', status: 'Active', color: 'emerald' },
-      { id: '3', ref: '8205', name: 'PQR Industries', ntn: '42301-1122334-3', cnic: '35202-4455667-3', status: 'Expired', color: 'red' },
-      { id: '4', ref: '9001', name: 'Well Products', ntn: '1234567-9', cnic: '34603-212060-6', status: 'Active', color: 'emerald' },
-      { id: '5', ref: '9002', name: 'MH International', ntn: '1234567-8', cnic: '34603-3032743-3', status: 'Active', color: 'emerald' },
-      { id: '6', ref: '9003', name: 'Imran NTN', ntn: '1234567-9', cnic: '34603-3032743-3', status: 'Active', color: 'emerald' },
-    ];
-  });
+  const [ntnRecords, setNtnRecords] = useState<any[]>([]);
   const [hsCodeRecords, setHsCodeRecords] = useState<any[]>([]);
   const [ntnMissingRecords, setNtnMissingRecords] = useState<any[]>([]);
   const [ntnAutoUpdateRecords, setNtnAutoUpdateRecords] = useState<any[]>([]);
   const [bucketShopRecords, setBucketShopRecords] = useState<any[]>([]);
   const [differentLinesRecords, setDifferentLinesRecords] = useState<any[]>([]);
+
+  const handleFirestoreError = (error: any, operation: string, path: string) => {
+    const errInfo = {
+      error: error.message || String(error),
+      operation,
+      path,
+      auth: {
+        uid: auth.currentUser?.uid,
+        email: auth.currentUser?.email,
+        emailVerified: auth.currentUser?.emailVerified
+      }
+    };
+    console.error(`Firestore Error [${operation}] on [${path}]:`, JSON.stringify(errInfo));
+    setError(`Permission Error: ${error.message}. Please ensure you are logged in with Google.`);
+  };
+
+  // Sync with Firestore
+  useEffect(() => {
+    if (!user) return;
+
+    const collections = [
+      { name: 'ntn_records', setter: setNtnRecords },
+      { name: 'hs_code_records', setter: setHsCodeRecords },
+      { name: 'missing_records', setter: setNtnMissingRecords },
+      { name: 'auto_update_records', setter: setNtnAutoUpdateRecords },
+      { name: 'bucket_shop_records', setter: setBucketShopRecords },
+      { name: 'different_lines_records', setter: setDifferentLinesRecords },
+    ];
+
+    const unsubscribes = collections.map(({ name, setter }) => {
+      const q = query(
+        collection(db, name),
+        where('userId', '==', user.uid)
+      );
+
+      return onSnapshot(q, (snapshot) => {
+        const records = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })).sort((a: any, b: any) => {
+          const timeA = a.createdAt?.toMillis?.() || 0;
+          const timeB = b.createdAt?.toMillis?.() || 0;
+          return timeB - timeA;
+        });
+        setter(records);
+      }, (err) => {
+        handleFirestoreError(err, 'LIST', name);
+      });
+    });
+
+    return () => unsubscribes.forEach(unsub => unsub());
+  }, [user]);
 
   const [hsCodeResults, setHsCodeResults] = useState<any[]>([]);
   const [recentHSCodeActivity, setRecentHSCodeActivity] = useState<any[]>([]);
@@ -163,31 +233,6 @@ function AppContent() {
   const [recentBucketShopActivity, setRecentBucketShopActivity] = useState<any[]>([]);
   const [differentLinesResults, setDifferentLinesResults] = useState<any[]>([]);
   const [recentDifferentLinesActivity, setRecentDifferentLinesActivity] = useState<any[]>([]);
-
-  // Persist records to localStorage
-  useEffect(() => {
-    localStorage.setItem('ntnRecords', JSON.stringify(ntnRecords));
-  }, [ntnRecords]);
-
-  useEffect(() => {
-    localStorage.setItem('hsCodeRecords', JSON.stringify(hsCodeRecords));
-  }, [hsCodeRecords]);
-
-  useEffect(() => {
-    localStorage.setItem('ntnMissingRecords', JSON.stringify(ntnMissingRecords));
-  }, [ntnMissingRecords]);
-
-  useEffect(() => {
-    localStorage.setItem('ntnAutoUpdateRecords', JSON.stringify(ntnAutoUpdateRecords));
-  }, [ntnAutoUpdateRecords]);
-
-  useEffect(() => {
-    localStorage.setItem('bucketShopRecords', JSON.stringify(bucketShopRecords));
-  }, [bucketShopRecords]);
-
-  useEffect(() => {
-    localStorage.setItem('differentLinesRecords', JSON.stringify(differentLinesRecords));
-  }, [differentLinesRecords]);
 
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [lockPin, setLockPin] = useState('1234');
@@ -317,6 +362,7 @@ function AppContent() {
         id: index.toString(),
         tracking,
         shipper: updatedShipper,
+        ntn: match ? (match.ntn || match.cnic || '') : '',
         originalShipper: shipperCompany,
         name: shipperName,
         status,
@@ -559,20 +605,33 @@ function AppContent() {
     const reader = new FileReader();
     const extension = file.name.split('.').pop()?.toLowerCase();
 
-    const processData = (data: any[]) => {
-      const newRecords = data.map((row, index) => ({
-        id: (ntnRecords.length + index + 1).toString(),
+    const processData = async (data: any[]) => {
+      if (!user) return;
+      
+      const newRecords = data.map((row) => ({
         ref: (row['REFF'] || row['ref'] || row['Ref'] || '').toString().trim(),
         name: (row['COMPANY NAMES'] || row['name'] || row['Name'] || '').toString().trim(),
         cnic: (row['CNIC'] || row['cnic'] || '').toString().trim(),
         ntn: (row['NTN'] || row['ntn'] || '').toString().trim(),
         status: 'Active',
-        color: 'emerald'
+        color: 'emerald',
+        userId: user.uid,
+        createdAt: serverTimestamp()
       })).filter(r => r.name !== '');
 
-      setNtnRecords(prev => [...newRecords, ...prev]);
-      setSuccessMessage(`Uploaded ${newRecords.length} NTN records to database!`);
-      setTimeout(() => setSuccessMessage(''), 3000);
+      try {
+        const batch = writeBatch(db);
+        newRecords.forEach(record => {
+          const docRef = doc(collection(db, 'ntn_records'));
+          batch.set(docRef, record);
+        });
+        await batch.commit();
+        setSuccessMessage(`Uploaded ${newRecords.length} NTN records to database!`);
+        setTimeout(() => setSuccessMessage(''), 3000);
+      } catch (err) {
+        console.error('Error uploading NTN records:', err);
+        setError('Failed to upload records to database.');
+      }
     };
 
     if (extension === 'csv') {
@@ -786,10 +845,17 @@ function AppContent() {
       ).slice(0, 6)
     : [];
 
-  const handleExpire = (id: string) => {
-    setNtnRecords(prev => prev.map(r => r.id === id ? { ...r, status: 'Expired', color: 'red' } : r));
-    setSuccessMessage('NTN record expired successfully');
-    setTimeout(() => setSuccessMessage(''), 3000);
+  const handleExpire = async (id: string) => {
+    if (!user) return;
+    try {
+      const docRef = doc(db, 'ntn_records', id);
+      await updateDoc(docRef, { status: 'Expired', color: 'red' });
+      setSuccessMessage('NTN record expired successfully');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Error expiring record:', err);
+      setError('Failed to update record status.');
+    }
   };
 
   const handleEdit = (record: any) => {
@@ -802,29 +868,38 @@ function AppContent() {
     setIsViewModalOpen(true);
   };
 
-  const saveEdit = (e: React.FormEvent) => {
+  const saveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { type, data, ...updateData } = editingRecord;
+    if (!user) return;
     
-    if (editingRecord.type === 'HS') {
-      setHsCodeRecords(prev => prev.map(r => r.id === editingRecord.id ? { ...r, ...updateData } : r));
-    } else {
-      setNtnRecords(prev => prev.map(r => r.id === editingRecord.id ? { ...r, ...updateData } : r));
+    const { id, type, data, ...updateData } = editingRecord;
+    const collectionName = type === 'HS' ? 'hs_code_records' : 'ntn_records';
+    
+    try {
+      const docRef = doc(db, collectionName, id);
+      await updateDoc(docRef, updateData);
+      setIsEditModalOpen(false);
+      setSuccessMessage('Record updated successfully');
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Error saving edit:', err);
+      setError('Failed to update record.');
     }
-    
-    setIsEditModalOpen(false);
-    setSuccessMessage('Record updated successfully');
-    setTimeout(() => setSuccessMessage(''), 3000);
   };
 
-  const handleAddRecord = (e: React.FormEvent) => {
+  const handleAddRecord = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) return;
     
-    const id = Math.random().toString(36).substr(2, 9);
+    const collectionName = getCollectionName(activeTab);
+    let newEntry: any = {
+      userId: user.uid,
+      createdAt: serverTimestamp()
+    };
     
     if (activeTab === 'HS Code') {
-      const newEntry = {
-        id,
+      newEntry = {
+        ...newEntry,
         tracking: newRecord.ref,
         shipper: newRecord.name,
         hs: newRecord.ntn,
@@ -832,40 +907,36 @@ function AppContent() {
         service: 'Air Freight',
         color: 'blue',
       };
-      setHsCodeRecords(prev => [newEntry, ...prev]);
     } else if (activeTab === 'NTN Missing') {
-      const newEntry = {
-        id,
+      newEntry = {
+        ...newEntry,
         tracking: newRecord.ref,
         company: newRecord.name,
         name: 'Pending',
         service: 'Express',
         color: 'orange',
       };
-      setNtnMissingRecords(prev => [newEntry, ...prev]);
     } else if (activeTab === 'Auto Update') {
-      const newEntry = {
-        id,
+      newEntry = {
+        ...newEntry,
         tracking: newRecord.ref,
         name: newRecord.name,
         ntn: newRecord.ntn,
         status: 'Pending',
         color: 'blue',
       };
-      setNtnAutoUpdateRecords(prev => [newEntry, ...prev]);
     } else if (activeTab === 'Bucket Shop') {
-      const newEntry = {
-        id,
+      newEntry = {
+        ...newEntry,
         tracking: newRecord.ref,
         company: newRecord.name,
         name: 'Pending',
         service: 'Express',
         color: 'teal',
       };
-      setBucketShopRecords(prev => [newEntry, ...prev]);
     } else if (activeTab === 'Different Lines') {
-      const newEntry = {
-        id,
+      newEntry = {
+        ...newEntry,
         tracking: newRecord.ref,
         company: newRecord.name,
         name: 'Pending',
@@ -873,26 +944,30 @@ function AppContent() {
         service: 'Express',
         color: 'blue',
       };
-      setDifferentLinesRecords(prev => [newEntry, ...prev]);
     } else {
-      const newEntry = {
-        id,
+      newEntry = {
+        ...newEntry,
         ...newRecord,
       };
-      setNtnRecords(prev => [newEntry, ...prev]);
     }
 
-    setIsAddModalOpen(false);
-    setNewRecord({
-      ref: '',
-      name: '',
-      ntn: '',
-      cnic: '',
-      status: 'Active',
-      color: 'emerald'
-    });
-    setSuccessMessage(`New record added to ${activeTab} successfully`);
-    setTimeout(() => setSuccessMessage(''), 3000);
+    try {
+      await addDoc(collection(db, collectionName), newEntry);
+      setIsAddModalOpen(false);
+      setNewRecord({
+        ref: '',
+        name: '',
+        ntn: '',
+        cnic: '',
+        status: 'Active',
+        color: 'emerald'
+      });
+      setSuccessMessage(`New record added to ${activeTab} successfully`);
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Error adding record:', err);
+      setError('Failed to add record.');
+    }
   };
 
   // --- Filtered Data ---
@@ -962,35 +1037,23 @@ function AppContent() {
     setTimeout(() => setCopiedText(null), 2000);
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccessMessage('');
     
-    // Use state-based credentials
-    if (email === loginUsername && password === loginPassword) {
-      const now = new Date();
-      const loginTime = now.toLocaleString('en-US', { 
-        day: 'numeric', 
-        month: 'short', 
-        year: 'numeric',
-        hour: '2-digit', 
-        minute: '2-digit',
-        hour12: true 
-      });
-      
-      setLastLogin(loginTime);
-      setLoginHistory(prev => [{
-        id: Math.random().toString(36).substr(2, 9),
-        time: loginTime,
-        ip: '192.168.1.1',
-        device: 'Chrome / Windows 11'
-      }, ...prev].slice(0, 10)); // Keep last 10 logins
-
-      setUser(mockUser);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
       setSuccessMessage('Login successful!');
-    } else {
-      setError(`Invalid credentials. Default: ${loginUsername} / ${loginPassword}`);
+      setTimeout(() => setSuccessMessage(''), 2000);
+    } catch (err: any) {
+      console.error('Login error:', err);
+      if (err.code === 'auth/unauthorized-domain') {
+        setError('Unauthorized Domain: Please add this domain to your Firebase Console (Authentication > Settings > Authorized domains).');
+      } else {
+        setError(err.message || 'Failed to sign in with Google.');
+      }
     }
   };
 
@@ -1001,10 +1064,18 @@ function AppContent() {
     }
     setError('');
     setSuccessMessage('Password reset email sent! Please check your inbox.');
+    setTimeout(() => setSuccessMessage(''), 3000);
   };
 
-  const handleLogout = () => {
-    setUser(null);
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      setSuccessMessage('Logged out successfully');
+      setTimeout(() => setSuccessMessage(''), 2000);
+    } catch (err: any) {
+      console.error('Logout error:', err);
+      setError('Failed to log out.');
+    }
   };
 
   const handleUnlock = () => {
@@ -1028,6 +1099,17 @@ function AppContent() {
     }, 500);
     return () => clearTimeout(timer);
   }, []);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#0a192f] flex items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-blue-400 text-xs font-bold uppercase tracking-widest animate-pulse">Initializing System...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (user) {
     return (
@@ -1163,6 +1245,13 @@ function AppContent() {
                       onClick={() => {
                         setActiveTab('Profile');
                         setShowScreenLock(false);
+                        setTimeout(() => {
+                          const element = document.getElementById('security-settings');
+                          if (element) {
+                            element.scrollIntoView({ behavior: 'smooth' });
+                            document.getElementById('new-password-input')?.focus();
+                          }
+                        }, 300);
                       }}
                       className="w-full flex items-center space-x-3 px-4 py-2 rounded-lg text-xs text-gray-400 hover:bg-white/5 hover:text-white transition-all"
                     >
@@ -1269,6 +1358,15 @@ function AppContent() {
                               handleLogout();
                             } else {
                               setActiveTab('Profile');
+                              if (item.label === 'Security') {
+                                setTimeout(() => {
+                                  const element = document.getElementById('security-settings');
+                                  if (element) {
+                                    element.scrollIntoView({ behavior: 'smooth' });
+                                    document.getElementById('new-password-input')?.focus();
+                                  }
+                                }, 300);
+                              }
                             }
                             setShowProfileDropdown(false);
                           }}
@@ -1684,8 +1782,8 @@ function AppContent() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredNtnAutoUpdateRecords.length > 0 ? (
-                      filteredNtnAutoUpdateRecords.map((row, i) => (
+                    {recentNtnAutoUpdateActivity.length > 0 ? (
+                      recentNtnAutoUpdateActivity.map((row, i) => (
                         <tr key={i} className="group hover:bg-gray-50/50 transition-all">
                           <td className="py-3 pl-4">
                             <div className="flex items-center space-x-2 group/copy">
@@ -1763,8 +1861,8 @@ function AppContent() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredBucketShopRecords.length > 0 ? (
-                      filteredBucketShopRecords.map((row, i) => (
+                    {recentBucketShopActivity.length > 0 ? (
+                      recentBucketShopActivity.map((row, i) => (
                         <tr key={i} className="group hover:bg-gray-50/50 transition-all">
                           <td className="py-3 pl-4">
                             <div className="flex items-center space-x-2 group/copy">
@@ -1778,13 +1876,13 @@ function AppContent() {
                             </div>
                           </td>
                           <td className="py-3">
-                            <p className="text-xs font-bold text-gray-800">{row.company}</p>
+                            <p className="text-xs font-bold text-gray-800">{row.shipper}</p>
                           </td>
                           <td className="py-3">
                             <p className="text-xs font-medium text-gray-600">{row.name}</p>
                           </td>
                           <td className="py-3 text-right pr-4">
-                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold bg-${row.color}-50 text-${row.color}-600 border border-${row.color}-100`}>
+                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold bg-teal-50 text-teal-600 border border-teal-100`}>
                               {row.service}
                             </span>
                           </td>
@@ -1795,7 +1893,7 @@ function AppContent() {
                         <td colSpan={4} className="py-10 text-center">
                           <div className="flex flex-col items-center justify-center text-gray-400">
                             <Search size={24} className="mb-2 opacity-20" />
-                            <p className="text-xs font-medium">No records found matching your search</p>
+                            <p className="text-xs font-medium">No recent Bucket Shop activity. Upload a file in the Bucket Shop tab.</p>
                           </div>
                         </td>
                       </tr>
@@ -1829,13 +1927,13 @@ function AppContent() {
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest pl-4">Tracking Number</th>
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Shipper Company</th>
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Shipper Name</th>
-                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Shpr Addl Addr</th>
-                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Shipper Address Line 1</th>
+                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Address Details</th>
+                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {filteredDifferentLinesRecords.length > 0 ? (
-                      filteredDifferentLinesRecords.map((row, i) => (
+                    {recentDifferentLinesActivity.length > 0 ? (
+                      recentDifferentLinesActivity.map((row, i) => (
                         <tr key={i} className="group hover:bg-gray-50/50 transition-all">
                           <td className="py-3 pl-4">
                             <div className="flex items-center space-x-2 group/copy">
@@ -1855,11 +1953,11 @@ function AppContent() {
                             <p className="text-xs font-medium text-gray-600">{row.name}</p>
                           </td>
                           <td className="py-3">
-                            <p className="text-[10px] text-gray-500 max-w-[150px] truncate" title={row.addr}>{row.addr}</p>
+                            <p className="text-[10px] text-gray-500 max-w-[150px] truncate" title={`${row.addrAddl} ${row.addr1}`}>{row.addrAddl} {row.addr1}</p>
                           </td>
                           <td className="py-3 text-right pr-4">
-                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold bg-${row.color}-50 text-${row.color}-600 border border-${row.color}-100`}>
-                              {row.service}
+                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-100`}>
+                              {row.status}
                             </span>
                           </td>
                         </tr>
@@ -1869,7 +1967,7 @@ function AppContent() {
                         <td colSpan={5} className="py-10 text-center">
                           <div className="flex flex-col items-center justify-center text-gray-400">
                             <Search size={24} className="mb-2 opacity-20" />
-                            <p className="text-xs font-medium">No records found matching your search</p>
+                            <p className="text-xs font-medium">No recent Different Lines activity. Upload a file in the Different Lines tab.</p>
                           </div>
                         </td>
                       </tr>
@@ -2238,7 +2336,7 @@ function AppContent() {
                       </div>
                     </div>
 
-                    <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                    <div id="security-settings" className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
                       <div className="flex items-center space-x-3 mb-6">
                         <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center text-amber-600">
                           <Settings size={20} />
@@ -2257,6 +2355,7 @@ function AppContent() {
                             className="w-full bg-gray-50 border border-gray-100 rounded-xl py-3 px-4 text-xs font-bold focus:outline-none focus:border-blue-500 transition-all"
                           />
                           <input 
+                            id="new-password-input"
                             type="password" 
                             placeholder="New Password" 
                             value={newPassword}
@@ -2775,87 +2874,58 @@ function AppContent() {
 
               {differentLinesResults.length > 0 && (
                 <div className="mt-10">
-                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-                    <div className="lg:col-span-2">
-                      <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">Processing Results ({differentLinesResults.length})</h3>
-                        <div className="flex items-center space-x-4">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-3 h-3 rounded-full bg-blue-500" />
-                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Filled</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-3 h-3 rounded-full bg-gray-300" />
-                            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Not Found</span>
-                          </div>
-                        </div>
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">Processing Results ({differentLinesResults.length})</h3>
+                    <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 rounded-full bg-blue-500" />
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Filled</span>
                       </div>
-
-                      <div className="overflow-x-auto rounded-3xl border border-gray-100">
-                        <table className="w-full">
-                          <thead>
-                            <tr className="text-left bg-gray-50/50">
-                              <th className="py-4 pl-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">Tracking Number</th>
-                              <th className="py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Shipper Company (Updated)</th>
-                              <th className="py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Shipper Name</th>
-                              <th className="py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Address Lines</th>
-                              <th className="py-4 pr-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-50">
-                            {differentLinesResults.map((row, i) => (
-                              <tr key={i} className="hover:bg-gray-50/30 transition-all">
-                                <td className="py-4 pl-6">
-                                  <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">{row.tracking}</span>
-                                </td>
-                                <td className="py-4">
-                                  <p className="text-sm font-bold text-gray-800">{row.company}</p>
-                                </td>
-                                <td className="py-4">
-                                  <p className="text-sm font-bold text-gray-700">{row.name}</p>
-                                </td>
-                                <td className="py-4">
-                                  <div className="max-w-xs overflow-hidden text-ellipsis whitespace-nowrap">
-                                    <p className="text-[10px] text-gray-400 font-medium">{row.addrAddl}</p>
-                                    <p className="text-[10px] text-gray-400 font-medium">{row.addr1}</p>
-                                  </div>
-                                </td>
-                                <td className="py-4 pr-6 text-right">
-                                  <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${row.status === 'Filled' ? 'text-blue-600 bg-blue-50' : 'text-gray-400 bg-gray-50'}`}>
-                                    {row.status}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                      <div className="flex items-center space-x-2">
+                        <div className="w-3 h-3 rounded-full bg-gray-300" />
+                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Not Found</span>
                       </div>
                     </div>
+                  </div>
 
-                    <div className="space-y-6">
-                      <div className="bg-gray-50 p-6 rounded-[32px] border border-gray-100">
-                        <div className="flex items-center space-x-3 mb-6">
-                          <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600">
-                            <Zap size={20} />
-                          </div>
-                          <h3 className="font-black text-gray-800 uppercase tracking-widest text-xs">Live Results</h3>
-                        </div>
-                        <div className="space-y-4">
-                          {recentDifferentLinesActivity.map((item, i) => (
-                            <div key={i} className="flex items-center space-x-3 p-3 bg-white rounded-2xl border border-gray-100 shadow-sm">
-                              <div className={`w-2 h-2 rounded-full ${item.status === 'Filled' ? 'bg-blue-500' : 'bg-gray-300'}`} />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[10px] font-black text-gray-800 truncate uppercase tracking-widest">{item.company}</p>
-                                <p className="text-[9px] text-gray-400 font-bold truncate">{item.tracking}</p>
+                  <div className="overflow-x-auto rounded-3xl border border-gray-100">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="text-left bg-gray-50/50">
+                          <th className="py-4 pl-6 text-[10px] font-black text-gray-400 uppercase tracking-widest">Tracking Number</th>
+                          <th className="py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Shipper Company (Updated)</th>
+                          <th className="py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Shipper Name</th>
+                          <th className="py-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Address Lines</th>
+                          <th className="py-4 pr-6 text-[10px] font-black text-gray-400 uppercase tracking-widest text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {differentLinesResults.map((row, i) => (
+                          <tr key={i} className="hover:bg-gray-50/30 transition-all">
+                            <td className="py-4 pl-6">
+                              <span className="text-xs font-mono font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-lg">{row.tracking}</span>
+                            </td>
+                            <td className="py-4">
+                              <p className="text-sm font-bold text-gray-800">{row.company}</p>
+                            </td>
+                            <td className="py-4">
+                              <p className="text-sm font-bold text-gray-700">{row.name}</p>
+                            </td>
+                            <td className="py-4">
+                              <div className="max-w-xs overflow-hidden text-ellipsis whitespace-nowrap">
+                                <p className="text-[10px] text-gray-400 font-medium">{row.addrAddl}</p>
+                                <p className="text-[10px] text-gray-400 font-medium">{row.addr1}</p>
                               </div>
-                              <span className={`text-[8px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${item.status === 'Filled' ? 'text-blue-600 bg-blue-50' : 'text-gray-400 bg-gray-50'}`}>
-                                {item.status}
+                            </td>
+                            <td className="py-4 pr-6 text-right">
+                              <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${row.status === 'Filled' ? 'text-blue-600 bg-blue-50' : 'text-gray-400 bg-gray-50'}`}>
+                                {row.status}
                               </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               )}
@@ -3320,9 +3390,56 @@ function AppContent() {
 
           <form onSubmit={handleLogin} className="space-y-5">
             {error && (
-              <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-center space-x-3 text-red-400 text-xs">
-                <AlertCircle size={16} />
-                <span>{error}</span>
+              <div className="space-y-3">
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-start space-x-3 text-red-400 text-xs">
+                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+                
+                {error.includes('Unauthorized Domain') && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 text-left"
+                  >
+                    <div className="flex items-center space-x-2 text-blue-400 mb-2">
+                      <Shield size={14} />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Setup Required</span>
+                    </div>
+                    <p className="text-[11px] text-gray-300 leading-relaxed mb-3">
+                      Firebase requires you to allowlist these domains in your console:
+                    </p>
+                    <div className="space-y-2">
+                      {[
+                        'ais-dev-depsw62gkiiq5eobxxh2jm-465532066617.asia-southeast1.run.app',
+                        'ais-pre-depsw62gkiiq5eobxxh2jm-465532066617.asia-southeast1.run.app'
+                      ].map(domain => (
+                        <div key={domain} className="flex items-center justify-between bg-black/20 rounded-lg p-2 border border-white/5">
+                          <code className="text-[9px] text-blue-300 truncate mr-2">{domain}</code>
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(domain);
+                              setSuccessMessage('URL Copied!');
+                              setTimeout(() => setSuccessMessage(''), 2000);
+                            }}
+                            className="p-1 hover:bg-white/10 rounded transition-colors text-gray-400 hover:text-white"
+                          >
+                            <Copy size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <a 
+                      href="https://console.firebase.google.com/project/gen-lang-client-0644856045/authentication/settings" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="mt-4 block w-full bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-[10px] font-bold uppercase tracking-widest py-2 rounded-lg text-center transition-all border border-blue-500/30"
+                    >
+                      Open Firebase Console
+                    </a>
+                  </motion.div>
+                )}
               </div>
             )}
             {successMessage && (
@@ -3398,7 +3515,7 @@ function AppContent() {
               type="submit"
               className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-4 rounded-2xl shadow-lg shadow-blue-900/20 flex items-center justify-center space-x-2 group transition-all active:scale-[0.98]"
             >
-              <span>{isLogin ? 'Login to Dashboard' : 'Create Account'}</span>
+              <span>Sign in with Google</span>
               <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
             </button>
           </form>
