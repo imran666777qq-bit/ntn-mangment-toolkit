@@ -135,6 +135,8 @@ function AppContent() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [viewingRecord, setViewingRecord] = useState<any>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [recordToDelete, setRecordToDelete] = useState<{ collectionName: string, id: string } | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [newRecord, setNewRecord] = useState({
     ref: '',
@@ -215,6 +217,13 @@ function AppContent() {
           return timeB - timeA;
         });
         setter(records);
+
+        // Update recent activity states with the latest 5 records from Firestore
+        if (name === 'hs_code_records') setRecentHSCodeActivity(records.slice(0, 5));
+        if (name === 'missing_records') setRecentNtnMissingActivity(records.slice(0, 5));
+        if (name === 'auto_update_records') setRecentNtnAutoUpdateActivity(records.slice(0, 5));
+        if (name === 'bucket_shop_records') setRecentBucketShopActivity(records.slice(0, 5));
+        if (name === 'different_lines_records') setRecentDifferentLinesActivity(records.slice(0, 5));
       }, (err) => {
         handleFirestoreError(err, 'LIST', name);
       });
@@ -855,6 +864,28 @@ function AppContent() {
     } catch (err) {
       console.error('Error expiring record:', err);
       setError('Failed to update record status.');
+    }
+  };
+
+  const handleDeleteRecord = (collectionName: string, id: string) => {
+    if (!user) return;
+    setRecordToDelete({ collectionName, id });
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDeleteRecord = async () => {
+    if (!user || !recordToDelete) return;
+    
+    try {
+      const docRef = doc(db, recordToDelete.collectionName, recordToDelete.id);
+      await deleteDoc(docRef);
+      setSuccessMessage('Record deleted successfully');
+      setIsDeleteModalOpen(false);
+      setRecordToDelete(null);
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Error deleting record:', err);
+      setError('Failed to delete record.');
     }
   };
 
@@ -1511,6 +1542,101 @@ function AppContent() {
               ))}
             </div>
 
+            {/* Quick NTN Search Engine */}
+            <div className="bg-white rounded-[32px] p-8 shadow-sm border border-gray-100 mb-8 overflow-hidden relative group">
+              <div className="absolute -right-10 -top-10 w-40 h-40 bg-blue-50 rounded-full blur-3xl opacity-50 group-hover:scale-150 transition-transform duration-700" />
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
+                      <Database size={24} />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-black text-gray-800 tracking-tight">NTN Search Engine</h3>
+                      <p className="text-[10px] text-gray-400 font-medium mt-0.5 uppercase tracking-widest">Scan database for company tax details</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button 
+                      onClick={() => setActiveTab('NTN Search')}
+                      className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-bold hover:bg-blue-100 transition-all uppercase tracking-widest"
+                    >
+                      Advanced Search
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative mb-8">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+                  <input 
+                    type="text" 
+                    placeholder="Search by Ref, NTN, CNIC or Company Name..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-bold text-sm"
+                  />
+                </div>
+
+                {searchQuery.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+                    {filteredNtnRecords.length > 0 ? (
+                      filteredNtnRecords.map((record, i) => (
+                        <motion.div 
+                          key={record.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.05 }}
+                          className="bg-gray-50/50 p-5 rounded-2xl border border-gray-50 hover:bg-white hover:shadow-xl hover:border-blue-100 transition-all group/item"
+                        >
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-blue-600 shadow-sm group-hover/item:scale-110 transition-transform">
+                                <Database size={18} />
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-black text-gray-800 tracking-tight truncate max-w-[150px]">{record.name}</h4>
+                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Ref: #{record.ref}</p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              <button 
+                                onClick={() => handleEdit(record)}
+                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                title="Edit"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button 
+                                onClick={() => handleDeleteRecord('ntn_records', record.id)}
+                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                title="Delete"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-white p-2.5 rounded-xl border border-gray-50">
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">NTN</p>
+                              <p className="text-[11px] font-mono font-bold text-gray-800">{record.ntn}</p>
+                            </div>
+                            <div className="bg-white p-2.5 rounded-xl border border-gray-50">
+                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">CNIC</p>
+                              <p className="text-[11px] font-mono font-bold text-gray-800">{record.cnic}</p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))
+                    ) : (
+                      <div className="col-span-2 py-10 text-center">
+                        <p className="text-xs text-gray-400 font-bold italic">No records found for "{searchQuery}"</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Unified Data Table */}
             <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100">
               <div className="flex items-center justify-between mb-6">
@@ -1603,6 +1729,13 @@ function AppContent() {
                                   <XCircle size={14} />
                                 </button>
                               )}
+                              <button 
+                                onClick={() => handleDeleteRecord('ntn_records', row.id)}
+                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                                title="Delete Record"
+                              >
+                                <Trash2 size={14} />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1646,7 +1779,8 @@ function AppContent() {
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest pl-4">Tracking Number</th>
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Shipper Company</th>
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
-                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Service Type</th>
+                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Service Type</th>
+                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -1668,10 +1802,19 @@ function AppContent() {
                               </span>
                             </div>
                           </td>
-                          <td className="py-3 text-right pr-4">
+                          <td className="py-3">
                             <span className="text-[10px] font-bold text-gray-500">
                               {row.service}
                             </span>
+                          </td>
+                          <td className="py-3 text-right pr-4">
+                            <button 
+                              onClick={() => handleDeleteRecord('hs_code_records', row.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              title="Delete Record"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -1714,7 +1857,8 @@ function AppContent() {
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest pl-4">Tracking Number</th>
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Shipper Company</th>
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Shipper Name</th>
-                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Service Type</th>
+                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Service Type</th>
+                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -1732,10 +1876,19 @@ function AppContent() {
                           <td className="py-3">
                             <p className="text-xs font-medium text-gray-600">{row.name}</p>
                           </td>
-                          <td className="py-3 text-right pr-4">
+                          <td className="py-3">
                             <span className="text-[10px] font-bold text-gray-500">
                               {row.service}
                             </span>
+                          </td>
+                          <td className="py-3 text-right pr-4">
+                            <button 
+                              onClick={() => handleDeleteRecord('missing_records', row.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              title="Delete Record"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -1778,7 +1931,8 @@ function AppContent() {
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest pl-4">Tracking Number</th>
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Shipper Name</th>
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">NTN Number</th>
-                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Status</th>
+                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -1810,11 +1964,20 @@ function AppContent() {
                               </button>
                             </div>
                           </td>
-                          <td className="py-3 text-right pr-4">
-                            <div className="flex items-center justify-end space-x-1.5">
+                          <td className="py-3">
+                            <div className="flex items-center justify-start space-x-1.5">
                               <div className={`w-1 h-1 rounded-full bg-${row.color}-500`} />
                               <span className={`text-[10px] font-bold text-${row.color}-600`}>{row.status}</span>
                             </div>
+                          </td>
+                          <td className="py-3 text-right pr-4">
+                            <button 
+                              onClick={() => handleDeleteRecord('auto_update_records', row.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              title="Delete Record"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -1857,7 +2020,8 @@ function AppContent() {
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest pl-4">Tracking Number</th>
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Shipper Company</th>
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Shipper Name</th>
-                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Service Type</th>
+                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Service Type</th>
+                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -1881,10 +2045,19 @@ function AppContent() {
                           <td className="py-3">
                             <p className="text-xs font-medium text-gray-600">{row.name}</p>
                           </td>
-                          <td className="py-3 text-right pr-4">
+                          <td className="py-3">
                             <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold bg-teal-50 text-teal-600 border border-teal-100`}>
                               {row.service}
                             </span>
+                          </td>
+                          <td className="py-3 text-right pr-4">
+                            <button 
+                              onClick={() => handleDeleteRecord('bucket_shop_records', row.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              title="Delete Record"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -1928,7 +2101,8 @@ function AppContent() {
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Shipper Company</th>
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Shipper Name</th>
                       <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Address Details</th>
-                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Status</th>
+                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+                      <th className="pb-3 text-[9px] font-bold text-gray-400 uppercase tracking-widest text-right pr-4">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -1955,10 +2129,19 @@ function AppContent() {
                           <td className="py-3">
                             <p className="text-[10px] text-gray-500 max-w-[150px] truncate" title={`${row.addrAddl} ${row.addr1}`}>{row.addrAddl} {row.addr1}</p>
                           </td>
-                          <td className="py-3 text-right pr-4">
+                          <td className="py-3">
                             <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold bg-blue-50 text-blue-600 border border-blue-100`}>
                               {row.status}
                             </span>
+                          </td>
+                          <td className="py-3 text-right pr-4">
+                            <button 
+                              onClick={() => handleDeleteRecord('different_lines_records', row.id)}
+                              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
+                              title="Delete Record"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </td>
                         </tr>
                       ))
@@ -2102,6 +2285,13 @@ function AppContent() {
                                   title="View Details"
                                 >
                                   <FileText size={18} />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteRecord('ntn_records', record.id)}
+                                  className="p-3 bg-gray-50 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"
+                                  title="Delete Record"
+                                >
+                                  <Trash2 size={18} />
                                 </button>
                               </div>
                             </div>
@@ -3313,6 +3503,47 @@ function AppContent() {
                         Close Profile
                       </button>
                     </div>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* Delete Confirmation Modal */}
+          <AnimatePresence>
+            {isDeleteModalOpen && (
+              <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                  className="bg-white rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden"
+                >
+                  <div className="p-8 text-center">
+                    <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center text-red-500 mx-auto mb-6">
+                      <Trash2 size={40} />
+                    </div>
+                    <h3 className="text-xl font-black text-gray-800 mb-2">Confirm Deletion</h3>
+                    <p className="text-gray-500 text-sm font-medium leading-relaxed">
+                      Are you sure you want to delete this record? This action is permanent and cannot be undone.
+                    </p>
+                  </div>
+                  <div className="p-6 bg-gray-50 flex items-center space-x-4">
+                    <button 
+                      onClick={() => {
+                        setIsDeleteModalOpen(false);
+                        setRecordToDelete(null);
+                      }}
+                      className="flex-1 py-3.5 rounded-2xl font-bold text-gray-500 hover:bg-gray-100 transition-all border border-gray-200"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      onClick={confirmDeleteRecord}
+                      className="flex-1 py-3.5 rounded-2xl font-bold bg-red-600 text-white hover:bg-red-700 transition-all shadow-lg shadow-red-600/20"
+                    >
+                      Delete Now
+                    </button>
                   </div>
                 </motion.div>
               </div>
