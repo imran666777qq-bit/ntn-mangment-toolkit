@@ -7,7 +7,9 @@ import {
   serverTimestamp, writeBatch, orderBy, getDocs
 } from 'firebase/firestore';
 import { 
-  onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut 
+  onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail,
+  confirmPasswordReset
 } from 'firebase/auth';
 import { db, auth } from './firebase';
 import { 
@@ -74,6 +76,9 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 // --- Main App Component ---
 function AppContent() {
   const [isLogin, setIsLogin] = useState(true);
+  const [isResetMode, setIsResetMode] = useState(false);
+  const [resetCode, setResetCode] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -252,7 +257,7 @@ function AppContent() {
   const [loginUsername, setLoginUsername] = useState('admin@example.com');
   const [loginPassword, setLoginPassword] = useState('admin123');
   const [newUsername, setNewUsername] = useState('');
-  const [newPassword, setNewPassword] = useState('');
+  const [settingsNewPassword, setSettingsNewPassword] = useState('');
   const [newPin, setNewPin] = useState('');
 
   const processHSCodeFile = (data: any[]) => {
@@ -1074,12 +1079,25 @@ function AppContent() {
     setSuccessMessage('');
     
     try {
+      await signInWithEmailAndPassword(auth, email, password);
+      setSuccessMessage('Login successful!');
+      setTimeout(() => setSuccessMessage(''), 2000);
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError(err.message || 'Failed to sign in.');
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setError('');
+    setSuccessMessage('');
+    try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
       setSuccessMessage('Login successful!');
       setTimeout(() => setSuccessMessage(''), 2000);
     } catch (err: any) {
-      console.error('Login error:', err);
+      console.error('Google Login error:', err);
       if (err.code === 'auth/unauthorized-domain') {
         setError('Unauthorized Domain: Please add this domain to your Firebase Console (Authentication > Settings > Authorized domains).');
       } else {
@@ -1088,14 +1106,40 @@ function AppContent() {
     }
   };
 
-  const handleForgotPassword = () => {
+  const handleForgotPassword = async () => {
     if (!email) {
       setError('Please enter your email address first.');
       return;
     }
     setError('');
-    setSuccessMessage('Password reset email sent! Please check your inbox.');
-    setTimeout(() => setSuccessMessage(''), 3000);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setSuccessMessage('Password reset email sent! Please check your inbox for the code.');
+      setIsResetMode(true);
+    } catch (err: any) {
+      console.error('Password reset error:', err);
+      setError(err.message || 'Failed to send password reset email.');
+    }
+  };
+
+  const handleConfirmResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
+    if (!resetCode || !resetNewPassword) {
+      setError('Please provide both the code and the new password.');
+      return;
+    }
+    try {
+      await confirmPasswordReset(auth, resetCode, resetNewPassword);
+      setSuccessMessage('Password has been reset successfully! You can now login.');
+      setIsResetMode(false);
+      setResetCode('');
+      setResetNewPassword('');
+    } catch (err: any) {
+      console.error('Confirm reset error:', err);
+      setError(err.message || 'Failed to reset password. The code may be invalid or expired.');
+    }
   };
 
   const handleLogout = async () => {
@@ -2548,17 +2592,17 @@ function AppContent() {
                             id="new-password-input"
                             type="password" 
                             placeholder="New Password" 
-                            value={newPassword}
-                            onChange={(e) => setNewPassword(e.target.value)}
+                            value={settingsNewPassword}
+                            onChange={(e) => setSettingsNewPassword(e.target.value)}
                             className="w-full bg-gray-50 border border-gray-100 rounded-xl py-3 px-4 text-xs font-bold focus:outline-none focus:border-blue-500 transition-all"
                           />
                           <button 
                             onClick={() => {
                               if (newUsername) setLoginUsername(newUsername);
-                              if (newPassword) setLoginPassword(newPassword);
+                              if (settingsNewPassword) setLoginPassword(settingsNewPassword);
                               setSuccessMessage('Login credentials updated!');
                               setNewUsername('');
-                              setNewPassword('');
+                              setSettingsNewPassword('');
                               setTimeout(() => setSuccessMessage(''), 3000);
                             }}
                             className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all"
@@ -3594,162 +3638,234 @@ function AppContent() {
           </div>
 
           {/* Login Form */}
-          <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl text-center">
-            <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mb-1">Authentication Mode</p>
-            <div className="flex bg-white/5 p-1 rounded-xl">
-              <button 
-                onClick={() => setIsLogin(true)}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${isLogin ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
-              >
-                Login
-              </button>
-              <button 
-                onClick={() => setIsLogin(false)}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${!isLogin ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}
-              >
-                Sign Up
-              </button>
-            </div>
-          </div>
+          {!isResetMode ? (
+            <form onSubmit={handleLogin} className="space-y-5">
+              {error && (
+                <div className="space-y-3">
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-start space-x-3 text-red-400 text-xs">
+                    <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                  
+                  {error.includes('Unauthorized Domain') && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 text-left"
+                    >
+                      <div className="flex items-center space-x-2 text-blue-400 mb-2">
+                        <Shield size={14} />
+                        <span className="text-[10px] font-bold uppercase tracking-widest">Setup Required</span>
+                      </div>
+                      <p className="text-[11px] text-gray-300 leading-relaxed mb-3">
+                        Firebase requires you to allowlist these domains in your console:
+                      </p>
+                      <div className="space-y-2">
+                        {[
+                          window.location.hostname,
+                          'ais-dev-depsw62gkiiq5eobxxh2jm-465532066617.asia-southeast1.run.app',
+                          'ais-pre-depsw62gkiiq5eobxxh2jm-465532066617.asia-southeast1.run.app'
+                        ].filter((v, i, a) => a.indexOf(v) === i).map(domain => (
+                          <div key={domain} className="flex items-center justify-between bg-black/20 rounded-lg p-2 border border-white/5">
+                            <code className="text-[9px] text-blue-300 truncate mr-2">{domain}</code>
+                            <button 
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(domain);
+                                setSuccessMessage('URL Copied!');
+                                setTimeout(() => setSuccessMessage(''), 2000);
+                              }}
+                              className="p-1 hover:bg-white/10 rounded transition-colors text-gray-400 hover:text-white"
+                            >
+                              <Copy size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <a 
+                        href="https://console.firebase.google.com/project/gen-lang-client-0644856045/authentication/settings" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="mt-4 block w-full bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-[10px] font-bold uppercase tracking-widest py-2 rounded-lg text-center transition-all border border-blue-500/30"
+                      >
+                        Open Firebase Console
+                      </a>
+                    </motion.div>
+                  )}
+                </div>
+              )}
+              {successMessage && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex items-center space-x-3 text-emerald-400 text-xs">
+                  <CheckCircle2 size={16} />
+                  <span>{successMessage}</span>
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] ml-1">Email Address</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-400 transition-colors">
+                    <User size={18} />
+                  </div>
+                  <input 
+                    type="email"
+                    placeholder="name@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
+                    required
+                  />
+                </div>
+              </div>
 
-          {!isLogin && (
-            <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl text-center">
-              <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest mb-1">New Account</p>
-              <p className="text-xs text-white font-medium italic">Create an account to access the dashboard</p>
-            </div>
-          )}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] ml-1">Password</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-400 transition-colors">
+                    <Lock size={18} />
+                  </div>
+                  <input 
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-12 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
+                    required
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} /> }
+                  </button>
+                </div>
+              </div>
 
-          <form onSubmit={handleLogin} className="space-y-5">
-            {error && (
-              <div className="space-y-3">
+              <div className="flex items-center justify-between px-1">
+                <label className="flex items-center space-x-2 cursor-pointer group">
+                  <div className="relative flex items-center justify-center">
+                    <input type="checkbox" className="peer sr-only" />
+                    <div className="w-4 h-4 border border-white/20 rounded bg-white/5 peer-checked:bg-blue-600 peer-checked:border-blue-600 transition-all" />
+                    <div className="absolute text-white opacity-0 peer-checked:opacity-100 transition-opacity">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4">
+                        <path d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-400 group-hover:text-gray-300 transition-colors">Remember me</span>
+                </label>
+                <button 
+                  type="button" 
+                  onClick={handleForgotPassword}
+                  className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                >
+                  Forgot?
+                </button>
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-4 rounded-2xl shadow-lg shadow-blue-900/20 flex items-center justify-center space-x-2 group transition-all active:scale-[0.98]"
+              >
+                <span>Sign In</span>
+                <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleConfirmResetPassword} className="space-y-5">
+              <div className="mb-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
+                <p className="text-xs text-blue-400 font-medium leading-relaxed">
+                  Please enter the <strong>Code</strong> from your email and your <strong>New Password</strong>.
+                </p>
+              </div>
+
+              {error && (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 flex items-start space-x-3 text-red-400 text-xs">
                   <AlertCircle size={16} className="mt-0.5 shrink-0" />
                   <span>{error}</span>
                 </div>
-                
-                {error.includes('Unauthorized Domain') && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-4 text-left"
-                  >
-                    <div className="flex items-center space-x-2 text-blue-400 mb-2">
-                      <Shield size={14} />
-                      <span className="text-[10px] font-bold uppercase tracking-widest">Setup Required</span>
-                    </div>
-                    <p className="text-[11px] text-gray-300 leading-relaxed mb-3">
-                      Firebase requires you to allowlist these domains in your console:
-                    </p>
-                    <div className="space-y-2">
-                      {[
-                        'ais-dev-depsw62gkiiq5eobxxh2jm-465532066617.asia-southeast1.run.app',
-                        'ais-pre-depsw62gkiiq5eobxxh2jm-465532066617.asia-southeast1.run.app'
-                      ].map(domain => (
-                        <div key={domain} className="flex items-center justify-between bg-black/20 rounded-lg p-2 border border-white/5">
-                          <code className="text-[9px] text-blue-300 truncate mr-2">{domain}</code>
-                          <button 
-                            type="button"
-                            onClick={() => {
-                              navigator.clipboard.writeText(domain);
-                              setSuccessMessage('URL Copied!');
-                              setTimeout(() => setSuccessMessage(''), 2000);
-                            }}
-                            className="p-1 hover:bg-white/10 rounded transition-colors text-gray-400 hover:text-white"
-                          >
-                            <Copy size={12} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <a 
-                      href="https://console.firebase.google.com/project/gen-lang-client-0644856045/authentication/settings" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      className="mt-4 block w-full bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 text-[10px] font-bold uppercase tracking-widest py-2 rounded-lg text-center transition-all border border-blue-500/30"
-                    >
-                      Open Firebase Console
-                    </a>
-                  </motion.div>
-                )}
-              </div>
-            )}
-            {successMessage && (
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex items-center space-x-3 text-emerald-400 text-xs">
-                <CheckCircle2 size={16} />
-                <span>{successMessage}</span>
-              </div>
-            )}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] ml-1">Email Address</label>
-              <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-400 transition-colors">
-                  <User size={18} />
-                </div>
-                <input 
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
-                  required
-                />
-              </div>
-            </div>
+              )}
 
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] ml-1">Password</label>
-              <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-400 transition-colors">
-                  <Lock size={18} />
+              {successMessage && (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 flex items-center space-x-3 text-emerald-400 text-xs">
+                  <CheckCircle2 size={16} />
+                  <span>{successMessage}</span>
                 </div>
-                <input 
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Enter password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-12 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
-                  required
-                />
-                <button 
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} /> }
-                </button>
-              </div>
-            </div>
+              )}
 
-            <div className="flex items-center justify-between px-1">
-              <label className="flex items-center space-x-2 cursor-pointer group">
-                <div className="relative flex items-center justify-center">
-                  <input type="checkbox" className="peer sr-only" />
-                  <div className="w-4 h-4 border border-white/20 rounded bg-white/5 peer-checked:bg-blue-600 peer-checked:border-blue-600 transition-all" />
-                  <div className="absolute text-white opacity-0 peer-checked:opacity-100 transition-opacity">
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="4">
-                      <path d="M5 13l4 4L19 7" />
-                    </svg>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] ml-1">Reset Code</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-400 transition-colors">
+                    <Key size={18} />
                   </div>
+                  <input 
+                    type="text"
+                    placeholder="Paste code from email"
+                    value={resetCode}
+                    onChange={(e) => setResetCode(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-4 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
+                    required
+                  />
                 </div>
-                <span className="text-xs text-gray-400 group-hover:text-gray-300 transition-colors">Remember me</span>
-              </label>
-              <button 
-                type="button" 
-                onClick={handleForgotPassword}
-                className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors"
-              >
-                Forgot?
-              </button>
-            </div>
+              </div>
 
-            <button 
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-4 rounded-2xl shadow-lg shadow-blue-900/20 flex items-center justify-center space-x-2 group transition-all active:scale-[0.98]"
-            >
-              <span>Sign in with Google</span>
-              <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-            </button>
-          </form>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.15em] ml-1">New Password</label>
+                <div className="relative group">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 group-focus-within:text-blue-400 transition-colors">
+                    <Lock size={18} />
+                  </div>
+                  <input 
+                    type={showPassword ? "text" : "password"}
+                    placeholder="Enter new password"
+                    value={resetNewPassword}
+                    onChange={(e) => setResetNewPassword(e.target.value)}
+                    className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-12 pr-12 text-white placeholder:text-gray-600 focus:outline-none focus:border-blue-500/50 focus:bg-white/10 transition-all"
+                    required
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} /> }
+                  </button>
+                </div>
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold py-4 rounded-2xl shadow-lg shadow-emerald-900/20 flex items-center justify-center space-x-2 group transition-all active:scale-[0.98]"
+              >
+                <span>Update Password</span>
+                <Save size={18} className="group-hover:translate-x-1 transition-transform" />
+              </button>
+
+              <button 
+                type="button"
+                onClick={() => setIsResetMode(false)}
+                className="w-full text-xs text-gray-400 hover:text-white font-medium transition-colors py-2"
+              >
+                Back to Login
+              </button>
+            </form>
+          )}
+
+          <div className="mt-6 flex items-center space-x-4">
+            <div className="flex-1 h-px bg-white/10" />
+            <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Or continue with</span>
+            <div className="flex-1 h-px bg-white/10" />
+          </div>
+
+          <button 
+            type="button"
+            onClick={handleGoogleLogin}
+            className="mt-6 w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold py-3.5 rounded-2xl flex items-center justify-center space-x-3 transition-all active:scale-[0.98]"
+          >
+            <img src="https://www.vectorlogo.zone/logos/google/google-icon.svg" alt="Google" className="w-5 h-5" />
+            <span className="text-sm">Sign in with Google</span>
+          </button>
 
           <div className="mt-8 text-center space-y-1">
             <p className="text-[10px] text-gray-500 uppercase tracking-widest">
