@@ -98,18 +98,18 @@ function AppContent() {
     return () => unsubscribe();
   }, []);
 
-  // Inactivity Auto-Logout (10 minutes)
+  // Inactivity Auto-Logout
   useEffect(() => {
     if (!user) return;
 
     let timeoutId: any;
-    const INACTIVITY_LIMIT = 10 * 60 * 1000; // 10 minutes
+    const INACTIVITY_LIMIT = autoLogoutMinutes * 60 * 1000;
 
     const resetTimer = () => {
       if (timeoutId) clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         handleLogout();
-        setError('You have been logged out due to inactivity.');
+        setError(`You have been logged out due to ${autoLogoutMinutes} minutes of inactivity.`);
       }, INACTIVITY_LIMIT);
     };
 
@@ -147,6 +147,15 @@ function AppContent() {
     const saved = localStorage.getItem('lastLogin');
     return saved || new Date().toLocaleString();
   });
+
+  const [autoLogoutMinutes, setAutoLogoutMinutes] = useState(() => {
+    const saved = localStorage.getItem('autoLogoutMinutes');
+    return saved ? parseInt(saved) : 10;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('autoLogoutMinutes', autoLogoutMinutes.toString());
+  }, [autoLogoutMinutes]);
 
   useEffect(() => {
     localStorage.setItem('userProfile', JSON.stringify(profile));
@@ -2662,6 +2671,30 @@ function AppContent() {
                           >
                             Update Login
                           </button>
+                        </div>
+
+                        <div className="pt-4 border-t border-gray-50 space-y-3">
+                          <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Auto Logout Time</h4>
+                          <div className="grid grid-cols-4 gap-2">
+                            {[1, 5, 10, 20].map((mins) => (
+                              <button
+                                key={mins}
+                                onClick={() => {
+                                  setAutoLogoutMinutes(mins);
+                                  setSuccessMessage(`Auto-logout set to ${mins} minutes`);
+                                  setTimeout(() => setSuccessMessage(''), 3000);
+                                }}
+                                className={`py-2 rounded-xl text-[10px] font-bold transition-all border ${
+                                  autoLogoutMinutes === mins
+                                    ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                                    : 'bg-gray-50 text-gray-500 border-gray-100 hover:border-blue-200'
+                                }`}
+                              >
+                                {mins} Min
+                              </button>
+                            ))}
+                          </div>
+                          <p className="text-[9px] text-gray-400 italic">App will logout automatically after {autoLogoutMinutes} minutes of inactivity.</p>
                         </div>
 
                         <div className="pt-4 border-t border-gray-50 space-y-3">
