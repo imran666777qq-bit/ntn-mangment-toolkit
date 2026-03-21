@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -11,6 +11,11 @@ export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 
 // Initialize Auth
 export const auth = getAuth(app);
+
+// Set persistence to session-only (logs out when tab/window is closed)
+setPersistence(auth, browserSessionPersistence).catch((error) => {
+  console.error("Error setting persistence:", error);
+});
 
 // Test connection to Firestore
 import { doc, getDocFromServer } from 'firebase/firestore';

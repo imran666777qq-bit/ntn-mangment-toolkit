@@ -97,6 +97,33 @@ function AppContent() {
     });
     return () => unsubscribe();
   }, []);
+
+  // Inactivity Auto-Logout (10 minutes)
+  useEffect(() => {
+    if (!user) return;
+
+    let timeoutId: any;
+    const INACTIVITY_LIMIT = 10 * 60 * 1000; // 10 minutes
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        handleLogout();
+        setError('You have been logged out due to inactivity.');
+      }, INACTIVITY_LIMIT);
+    };
+
+    // Events to track activity
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach(event => window.addEventListener(event, resetTimer));
+
+    resetTimer(); // Start timer
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach(event => window.removeEventListener(event, resetTimer));
+    };
+  }, [user]);
   const [showScreenLock, setShowScreenLock] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showLogoutDropdown, setShowLogoutDropdown] = useState(false);
@@ -1111,14 +1138,26 @@ function AppContent() {
       setError('Please enter your email address first.');
       return;
     }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
     setError('');
+    setLoading(true);
     try {
       await sendPasswordResetEmail(auth, email);
-      setSuccessMessage('Password reset email sent! Please check your inbox for the code.');
+      setSuccessMessage('Reset link sent! 1. Open the link in your email. 2. Copy the "oobCode" from the URL. 3. Paste it here.');
       setIsResetMode(true);
     } catch (err: any) {
       console.error('Password reset error:', err);
-      setError(err.message || 'Failed to send password reset email.');
+      if (err.code === 'auth/user-not-found') {
+        setError('No account found with this email address.');
+      } else {
+        setError(err.message || 'Failed to send password reset email. Check your internet or Firebase settings.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1130,15 +1169,29 @@ function AppContent() {
       setError('Please provide both the code and the new password.');
       return;
     }
+    if (resetNewPassword.length < 6) {
+      setError('New password must be at least 6 characters long.');
+      return;
+    }
+    setLoading(true);
     try {
       await confirmPasswordReset(auth, resetCode, resetNewPassword);
-      setSuccessMessage('Password has been reset successfully! You can now login.');
-      setIsResetMode(false);
-      setResetCode('');
-      setResetNewPassword('');
+      setSuccessMessage('Password reset successful! You can now login with your new password.');
+      setTimeout(() => {
+        setIsResetMode(false);
+        setResetCode('');
+        setResetNewPassword('');
+        setSuccessMessage('');
+      }, 3000);
     } catch (err: any) {
       console.error('Confirm reset error:', err);
-      setError(err.message || 'Failed to reset password. The code may be invalid or expired.');
+      if (err.code === 'auth/invalid-action-code') {
+        setError('Invalid or expired code. Please request a new reset link.');
+      } else {
+        setError(err.message || 'Failed to reset password.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
