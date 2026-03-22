@@ -88,15 +88,78 @@ function AppContent() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [activeTab, setActiveTab] = useState('Dashboard');
+  const [isApproved, setIsApproved] = useState(false);
+  const [isCheckingApproval, setIsCheckingApproval] = useState(false);
+  const [allUsers, setAllUsers] = useState<any[]>([]);
+
+  const ADMIN_EMAIL = 'imran666777qq@gmail.com';
 
   // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setAuthLoading(true);
+        setIsCheckingApproval(true);
+        
+        // Check if admin
+        if (firebaseUser.email === ADMIN_EMAIL) {
+          setIsApproved(true);
+          setUser(firebaseUser);
+          setIsCheckingApproval(false);
+          setAuthLoading(false);
+          return;
+        }
+
+        // Check Firestore for approval status
+        try {
+          const userDocRef = doc(db, 'users', firebaseUser.uid);
+          const userDoc = await getDocs(query(collection(db, 'users'), where('uid', '==', firebaseUser.uid)));
+          
+          if (userDoc.empty) {
+            // New user, create pending request
+            const newUser = {
+              uid: firebaseUser.uid,
+              email: firebaseUser.email,
+              displayName: firebaseUser.displayName || 'New User',
+              photoURL: firebaseUser.photoURL || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png',
+              status: 'pending',
+              role: 'user',
+              createdAt: new Date().toISOString()
+            };
+            await addDoc(collection(db, 'users'), newUser);
+            setIsApproved(false);
+          } else {
+            const userData = userDoc.docs[0].data();
+            if (userData.status === 'approved') {
+              setIsApproved(true);
+            } else {
+              setIsApproved(false);
+            }
+          }
+        } catch (err) {
+          console.error('Error checking approval:', err);
+          setIsApproved(false);
+        }
+        
+        setIsCheckingApproval(false);
+      }
+      
       setUser(firebaseUser);
       setAuthLoading(false);
     });
     return () => unsubscribe();
   }, []);
+
+  // Fetch all users for admin
+  useEffect(() => {
+    if (user?.email === ADMIN_EMAIL && activeTab === 'User Management') {
+      const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
+        const usersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setAllUsers(usersList);
+      });
+      return () => unsubscribe();
+    }
+  }, [user, activeTab]);
 
   // Inactivity Auto-Logout
   useEffect(() => {
@@ -1246,7 +1309,7 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, []);
 
-  if (authLoading) {
+  if (authLoading || isCheckingApproval) {
     return (
       <div className="min-h-screen bg-[#0a192f] flex items-center justify-center">
         <div className="flex flex-col items-center space-y-4">
@@ -1258,6 +1321,36 @@ function AppContent() {
   }
 
   if (user) {
+    if (!isApproved) {
+      return (
+        <div className="min-h-screen bg-[#0a192f] flex items-center justify-center p-6">
+          <div className="bg-white/5 border border-white/10 rounded-[40px] p-12 max-w-lg w-full text-center backdrop-blur-2xl shadow-2xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-indigo-600"></div>
+            <div className="w-24 h-24 bg-blue-600/20 rounded-full mx-auto flex items-center justify-center text-blue-400 mb-8 shadow-lg shadow-blue-600/10 border border-blue-500/20">
+              <Shield size={48} className="animate-pulse" />
+            </div>
+            <h2 className="text-3xl font-black text-white mb-4 tracking-tight">Access Pending Approval</h2>
+            <p className="text-blue-200/60 text-lg mb-8 leading-relaxed">
+              Your account (<span className="text-blue-400 font-bold">{user.email}</span>) has been registered. 
+              Please wait for the administrator to approve your access request.
+            </p>
+            <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 mb-8">
+              <p className="text-blue-400 text-sm font-medium">
+                An email notification has been sent to the administrator. 
+                You will be able to access the dashboard once approved.
+              </p>
+            </div>
+            <button 
+              onClick={handleLogout}
+              className="w-full bg-white/5 hover:bg-white/10 text-white px-8 py-4 rounded-2xl transition-all font-bold flex items-center justify-center space-x-3 border border-white/10 group"
+            >
+              <LogOut size={20} className="group-hover:-translate-x-1 transition-transform" />
+              <span>Sign Out & Check Later</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen w-full bg-[#f0f2f5] text-gray-800 font-sans flex overflow-hidden relative">
         {/* Screen Lock Overlay */}
@@ -1356,6 +1449,7 @@ function AppContent() {
               { icon: RefreshCw, label: 'NTN Auto Update' },
               { icon: ShoppingBag, label: 'Bucket Shop' },
               { icon: Layers, label: 'Different Lines' },
+              ...(user?.email === ADMIN_EMAIL ? [{ icon: ShieldCheck, label: 'User Management' }] : []),
               { icon: User, label: 'Profile' },
               { icon: Lock, label: 'Security', hasSubmenu: true },
               { icon: LogOut, label: 'Logout', hasArrow: true },
@@ -1593,6 +1687,107 @@ function AppContent() {
 
           {/* Scrollable Area */}
           <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+            {activeTab === 'User Management' && user?.email === ADMIN_EMAIL && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h2 className="text-2xl font-black text-[#1e293b] tracking-tight">User Management</h2>
+                    <p className="text-gray-500 text-sm font-medium">Review and approve access requests</p>
+                  </div>
+                  <div className="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-widest border border-blue-100">
+                    {allUsers.length} Total Users
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  {allUsers.map((u) => (
+                    <div key={u.id} className="bg-white border border-gray-100 rounded-[32px] p-6 shadow-sm hover:shadow-md transition-all flex items-center justify-between group">
+                      <div className="flex items-center space-x-4">
+                        <div className="w-14 h-14 rounded-2xl overflow-hidden shadow-inner border border-gray-100">
+                          <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-gray-900">{u.displayName}</h3>
+                          <p className="text-sm text-gray-500 font-medium">{u.email}</p>
+                          <div className="flex items-center space-x-2 mt-1">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest ${
+                              u.status === 'approved' ? 'bg-green-100 text-green-600' : 
+                              u.status === 'pending' ? 'bg-amber-100 text-amber-600' : 
+                              'bg-red-100 text-red-600'
+                            }`}>
+                              {u.status}
+                            </span>
+                            <span className="text-[10px] text-gray-300 font-bold uppercase tracking-widest">
+                              Joined {new Date(u.createdAt).toLocaleDateString()}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {u.status !== 'approved' && (
+                          <button 
+                            onClick={async () => {
+                              try {
+                                await updateDoc(doc(db, 'users', u.id), { status: 'approved' });
+                                setSuccessMessage(`Approved ${u.displayName}`);
+                                setTimeout(() => setSuccessMessage(''), 2000);
+                              } catch (err) {
+                                console.error('Error approving user:', err);
+                              }
+                            }}
+                            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2"
+                          >
+                            <CheckCircle2 size={14} />
+                            <span>Approve</span>
+                          </button>
+                        )}
+                        {u.status !== 'rejected' && (
+                          <button 
+                            onClick={async () => {
+                              try {
+                                await updateDoc(doc(db, 'users', u.id), { status: 'rejected' });
+                                setSuccessMessage(`Rejected ${u.displayName}`);
+                                setTimeout(() => setSuccessMessage(''), 2000);
+                              } catch (err) {
+                                console.error('Error rejecting user:', err);
+                              }
+                            }}
+                            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-2"
+                          >
+                            <XCircle size={14} />
+                            <span>Reject</span>
+                          </button>
+                        )}
+                        <button 
+                          onClick={async () => {
+                            if (confirm(`Are you sure you want to delete ${u.displayName}?`)) {
+                              try {
+                                await deleteDoc(doc(db, 'users', u.id));
+                                setSuccessMessage(`Deleted ${u.displayName}`);
+                                setTimeout(() => setSuccessMessage(''), 2000);
+                              } catch (err) {
+                                console.error('Error deleting user:', err);
+                              }
+                            }
+                          }}
+                          className="bg-gray-100 hover:bg-gray-200 text-gray-600 p-2 rounded-xl transition-all"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {allUsers.length === 0 && (
+                    <div className="text-center py-20 bg-white rounded-[40px] border border-dashed border-gray-200">
+                      <User size={48} className="mx-auto text-gray-200 mb-4" />
+                      <p className="text-gray-400 font-medium">No access requests found</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {activeTab === 'Dashboard' && (
               <>
                 {/* New Search Bar Section (Moved from header) */}

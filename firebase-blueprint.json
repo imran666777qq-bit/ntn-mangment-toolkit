@@ -1,5 +1,20 @@
 {
   "entities": {
+    "AppUser": {
+      "title": "App User",
+      "description": "A user of the application with approval status",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "status", "role"]
+    },
     "NtnRecord": {
       "title": "NTN Record",
       "description": "A record containing NTN and company details",
@@ -78,6 +93,10 @@
     "/different_lines_records/{recordId}": {
       "schema": "GenericRecord",
       "description": "Collection of different lines records"
+    },
+    "/users/{userId}": {
+      "schema": "AppUser",
+      "description": "Collection of application users and their approval status"
     }
   }
 }
