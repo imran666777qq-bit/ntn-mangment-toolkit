@@ -117,5 +117,10 @@ service cloud.firestore {
       allow update: if isAdmin();
       allow delete: if isAdmin();
     }
+
+    match /settings/{settingId} {
+      allow read: if true; // Allow anyone to read settings (for emailjs keys)
+      allow write: if isAdmin();
+    }
   }
 }

@@ -67,9 +67,24 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["tracking", "userId"]
+    },
+    "AppSetting": {
+      "title": "App Setting",
+      "description": "A setting for the application",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "value": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "value"]
     }
   },
   "firestore": {
+    "/settings/{settingId}": {
+      "schema": "AppSetting",
+      "description": "Collection of application settings"
+    },
     "/ntn_records/{recordId}": {
       "schema": "NtnRecord",
       "description": "Collection of NTN records"

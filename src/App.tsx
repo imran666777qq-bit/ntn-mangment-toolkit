@@ -4,12 +4,12 @@ import * as XLSX from 'xlsx';
 import Papa from 'papaparse';
 import { 
   collection, onSnapshot, query, where, addDoc, updateDoc, deleteDoc, doc, 
-  serverTimestamp, writeBatch, orderBy, getDocs
+  serverTimestamp, writeBatch, orderBy, getDocs, getDoc, setDoc
 } from 'firebase/firestore';
 import { 
   onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut,
   signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail,
-  confirmPasswordReset
+  confirmPasswordReset, updateProfile, updatePassword
 } from 'firebase/auth';
 import { db, auth } from './firebase';
 import { 
@@ -30,6 +30,8 @@ const mockUser = {
   isAnonymous: false,
   providerData: []
 };
+
+import emailjs from 'emailjs-com';
 
 // --- Error Boundary ---
 interface ErrorBoundaryProps {
@@ -91,12 +93,41 @@ function AppContent() {
   const [isApproved, setIsApproved] = useState(false);
   const [isCheckingApproval, setIsCheckingApproval] = useState(false);
   const [allUsers, setAllUsers] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [emailjsServiceId, setEmailjsServiceId] = useState('');
+  const [emailjsTemplateId, setEmailjsTemplateId] = useState('');
+  const [emailjsPublicKey, setEmailjsPublicKey] = useState('');
+
+  // Fetch Settings
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const serviceDoc = await getDoc(doc(db, 'settings', 'emailjs_service_id'));
+        const templateDoc = await getDoc(doc(db, 'settings', 'emailjs_template_id'));
+        const publicDoc = await getDoc(doc(db, 'settings', 'emailjs_public_key'));
+
+        if (serviceDoc.exists()) setEmailjsServiceId(serviceDoc.data().value);
+        if (templateDoc.exists()) setEmailjsTemplateId(templateDoc.data().value);
+        if (publicDoc.exists()) setEmailjsPublicKey(publicDoc.data().value);
+      } catch (err) {
+        console.error('Error fetching settings:', err);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   const ADMIN_EMAIL = 'imran666777qq@gmail.com';
 
   // Auth Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    let unsubscribeUser: (() => void) | null = null;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (unsubscribeUser) {
+        unsubscribeUser();
+        unsubscribeUser = null;
+      }
+
       if (firebaseUser) {
         setAuthLoading(true);
         setIsCheckingApproval(true);
@@ -110,12 +141,10 @@ function AppContent() {
           return;
         }
 
-        // Check Firestore for approval status
-        try {
-          const userDocRef = doc(db, 'users', firebaseUser.uid);
-          const userDoc = await getDocs(query(collection(db, 'users'), where('uid', '==', firebaseUser.uid)));
-          
-          if (userDoc.empty) {
+        // Listen to user's own document for approval status
+        const userDocRef = doc(db, 'users', firebaseUser.uid);
+        unsubscribeUser = onSnapshot(userDocRef, async (docSnap) => {
+          if (!docSnap.exists()) {
             // New user, create pending request
             const newUser = {
               uid: firebaseUser.uid,
@@ -126,40 +155,78 @@ function AppContent() {
               role: 'user',
               createdAt: new Date().toISOString()
             };
-            await addDoc(collection(db, 'users'), newUser);
+            try {
+              await setDoc(userDocRef, newUser);
+              
+              // Send Email Notification to Admin
+              const templateParams = {
+                to_email: ADMIN_EMAIL,
+                user_name: newUser.displayName,
+                user_email: newUser.email,
+                message: `A new user has signed up and is waiting for approval: ${newUser.displayName} (${newUser.email})`
+              };
+
+              // Fetch settings directly to avoid race condition
+              const serviceDoc = await getDoc(doc(db, 'settings', 'emailjs_service_id'));
+              const templateDoc = await getDoc(doc(db, 'settings', 'emailjs_template_id'));
+              const publicDoc = await getDoc(doc(db, 'settings', 'emailjs_public_key'));
+
+              const sId = serviceDoc.exists() ? serviceDoc.data().value : emailjsServiceId;
+              const tId = templateDoc.exists() ? templateDoc.data().value : emailjsTemplateId;
+              const pKey = publicDoc.exists() ? publicDoc.data().value : emailjsPublicKey;
+
+              if (sId && tId && pKey) {
+                emailjs.send(sId, tId, templateParams, pKey)
+                  .then((result) => {
+                      console.log('Email successfully sent!', result.text);
+                  }, (error) => {
+                      console.log('Failed to send email...', error.text);
+                  });
+              } else {
+                console.log('EmailJS not configured. New user signup notification would be sent to:', ADMIN_EMAIL);
+              }
+              
+            } catch (err) {
+              console.error('Error creating user profile:', err);
+            }
             setIsApproved(false);
           } else {
-            const userData = userDoc.docs[0].data();
-            if (userData.status === 'approved') {
-              setIsApproved(true);
-            } else {
-              setIsApproved(false);
-            }
+            const userData = docSnap.data();
+            setIsApproved(userData?.status === 'approved');
           }
-        } catch (err) {
-          console.error('Error checking approval:', err);
-          setIsApproved(false);
-        }
-        
+          setIsCheckingApproval(false);
+          setAuthLoading(false);
+        }, (err) => {
+          console.error('Error listening to user doc:', err);
+          setIsCheckingApproval(false);
+          setAuthLoading(false);
+        });
+
+        setUser(firebaseUser);
+      } else {
+        setUser(null);
+        setIsApproved(false);
+        setAuthLoading(false);
         setIsCheckingApproval(false);
       }
-      
-      setUser(firebaseUser);
-      setAuthLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeUser) unsubscribeUser();
+    };
   }, []);
 
   // Fetch all users for admin
   useEffect(() => {
-    if (user?.email === ADMIN_EMAIL && activeTab === 'User Management') {
+    if (user?.email === ADMIN_EMAIL) {
       const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
         const usersList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setAllUsers(usersList);
       });
       return () => unsubscribe();
     }
-  }, [user, activeTab]);
+  }, [user]);
 
   // Inactivity Auto-Logout
   useEffect(() => {
@@ -223,6 +290,7 @@ function AppContent() {
     return saved ? parseInt(saved) : 10;
   });
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const [logoStyle, setLogoStyle] = useState(0);
 
   useEffect(() => {
     localStorage.setItem('autoLogoutMinutes', autoLogoutMinutes.toString());
@@ -301,7 +369,7 @@ function AppContent() {
 
   // Sync with Firestore
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isApproved) return;
 
     const collections = [
       { name: 'ntn_records', setter: setNtnRecords },
@@ -1185,14 +1253,38 @@ function AppContent() {
     e.preventDefault();
     setError('');
     setSuccessMessage('');
+    setLoading(true);
     
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      setSuccessMessage('Login successful!');
+      if (isLogin) {
+        await signInWithEmailAndPassword(auth, email, password);
+        setSuccessMessage('Login successful!');
+      } else {
+        if (password.length < 6) {
+          setError('Password must be at least 6 characters long.');
+          setLoading(false);
+          return;
+        }
+        await createUserWithEmailAndPassword(auth, email, password);
+        setSuccessMessage('Account created successfully! Waiting for approval.');
+        setIsLogin(true);
+      }
       setTimeout(() => setSuccessMessage(''), 2000);
     } catch (err: any) {
-      console.error('Login error:', err);
-      setError(err.message || 'Failed to sign in.');
+      console.error('Auth error:', err);
+      if (err.code === 'auth/email-already-in-use') {
+        setError('This email is already registered. Please login instead.');
+      } else if (err.code === 'auth/invalid-email') {
+        setError('Invalid email address format.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('Password is too weak.');
+      } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+        setError('Invalid email or password.');
+      } else {
+        setError(err.message || 'Failed to process request.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1419,8 +1511,12 @@ function AppContent() {
           }}
           className="bg-[#1e293b] text-white flex flex-col shadow-2xl z-20 relative overflow-hidden transition-all duration-300 ease-in-out"
         >
-          <div className={`p-6 flex items-center ${isSidebarHovered ? 'space-x-3' : 'justify-center'} border-b border-white/5 h-20`}>
-            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg overflow-hidden p-1 shrink-0">
+          <div 
+            onClick={() => setLogoStyle((prev) => (prev + 1) % 6)}
+            className={`p-6 flex items-center ${isSidebarHovered ? 'space-x-3' : 'justify-center'} border-b border-white/5 h-20 cursor-pointer group hover:bg-white/5 transition-colors`}
+            title="Click to change logo style"
+          >
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg overflow-hidden p-1 shrink-0 group-hover:scale-110 transition-transform">
               <img 
                 src="https://www.vectorlogo.zone/logos/fedex/fedex-ar21.svg" 
                 alt="FedEx Logo" 
@@ -1429,14 +1525,50 @@ function AppContent() {
               />
             </div>
             {isSidebarHovered && (
-              <motion.span 
+              <motion.div 
+                key={logoStyle}
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="font-black text-[10px] uppercase tracking-tighter leading-tight text-blue-400"
+                className="flex flex-col select-none"
               >
-                ɴᴛɴ ꜱʏꜱᴛᴇᴍ<br />
-                <span className="text-white opacity-50">ᴍᴀɴᴀɢᴇᴍᴇɴᴛ</span>
-              </motion.span>
+                {logoStyle === 0 && (
+                  <>
+                    <span className="font-black text-[14px] uppercase tracking-tighter text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]">NTN SYSTEM</span>
+                    <span className="text-white opacity-40 text-[8px] font-bold uppercase tracking-[0.2em] -mt-1">MANAGEMENT PRO</span>
+                  </>
+                )}
+                {logoStyle === 1 && (
+                  <>
+                    <span className="font-black text-[14px] uppercase tracking-tight text-white">NTN<span className="text-blue-500">.</span>SYSTEM</span>
+                    <div className="h-[1px] w-full bg-blue-500/30 mt-0.5"></div>
+                    <span className="text-gray-500 text-[7px] font-black uppercase tracking-widest mt-0.5">FEDEX AUTHORIZED</span>
+                  </>
+                )}
+                {logoStyle === 2 && (
+                  <>
+                    <span className="font-black text-[14px] uppercase tracking-tighter bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">NTN SYSTEM</span>
+                    <span className="text-white/30 text-[8px] font-medium italic -mt-0.5">Digital Logistics</span>
+                  </>
+                )}
+                {logoStyle === 3 && (
+                  <div className="bg-white/10 backdrop-blur-md border border-white/20 px-2 py-0.5 rounded-lg flex flex-col items-center">
+                    <span className="font-black text-[11px] uppercase tracking-[0.1em] text-white">NTN SYSTEM</span>
+                    <span className="text-[6px] font-bold text-blue-400 uppercase tracking-widest">SECURE PORTAL</span>
+                  </div>
+                )}
+                {logoStyle === 4 && (
+                  <>
+                    <span className="font-mono text-[12px] font-bold tracking-[0.2em] text-blue-400">NTN_SYS</span>
+                    <span className="font-mono text-[8px] text-white/40 tracking-tighter -mt-1">v2.5.0-STABLE</span>
+                  </>
+                )}
+                {logoStyle === 5 && (
+                  <div className="border-l-2 border-blue-500 pl-2">
+                    <span className="font-black text-[15px] uppercase leading-none text-white block">NTN</span>
+                    <span className="font-bold text-[10px] uppercase leading-none text-blue-500 block tracking-widest">SYSTEM</span>
+                  </div>
+                )}
+              </motion.div>
             )}
           </div>
 
@@ -1597,10 +1729,108 @@ function AppContent() {
             </div>
             
             <div className="flex items-center space-x-6 ml-8">
-              <div className="flex items-center">
-                <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 cursor-pointer hover:bg-blue-100 transition-colors">
+              <div className="relative">
+                <div 
+                  onClick={() => setShowNotifications(!showNotifications)}
+                  className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 cursor-pointer hover:bg-blue-100 transition-colors relative"
+                >
                   <Bell size={20} />
+                  {user?.email === ADMIN_EMAIL && allUsers.filter(u => u.status === 'pending').length > 0 && (
+                    <span className="absolute top-0 right-0 w-3 h-3 bg-red-500 border-2 border-white rounded-full" />
+                  )}
                 </div>
+
+                <AnimatePresence>
+                  {showNotifications && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      className="absolute right-0 mt-3 w-80 bg-white rounded-[32px] shadow-2xl border border-gray-100 p-4 z-50 overflow-hidden"
+                    >
+                      <div className="flex items-center justify-between mb-4 px-2">
+                        <h3 className="font-black text-gray-900 text-sm uppercase tracking-widest">Notifications</h3>
+                        <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
+                          {allUsers.filter(u => u.status === 'pending').length} New Requests
+                        </span>
+                      </div>
+
+                      <div className="max-h-96 overflow-y-auto custom-scrollbar space-y-3">
+                        {user?.email === ADMIN_EMAIL ? (
+                          allUsers.filter(u => u.status === 'pending').length > 0 ? (
+                            allUsers.filter(u => u.status === 'pending').map((u) => (
+                              <div key={u.id} className="bg-gray-50 rounded-2xl p-3 border border-gray-100">
+                                <div className="flex items-center space-x-3 mb-3">
+                                  <div className="w-10 h-10 rounded-xl overflow-hidden shadow-inner border border-white">
+                                    <img src={u.photoURL} alt={u.displayName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-gray-900 truncate">{u.displayName}</p>
+                                    <p className="text-[10px] text-gray-500 truncate">{u.email}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <button 
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        await updateDoc(doc(db, 'users', u.id), { status: 'approved' });
+                                        setSuccessMessage(`Approved ${u.displayName}`);
+                                        setTimeout(() => setSuccessMessage(''), 2000);
+                                      } catch (err) {
+                                        console.error('Error approving user:', err);
+                                      }
+                                    }}
+                                    className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button 
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        await updateDoc(doc(db, 'users', u.id), { status: 'rejected' });
+                                        setSuccessMessage(`Rejected ${u.displayName}`);
+                                        setTimeout(() => setSuccessMessage(''), 2000);
+                                      } catch (err) {
+                                        console.error('Error rejecting user:', err);
+                                      }
+                                    }}
+                                    className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                                  >
+                                    Reject
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="py-8 text-center">
+                              <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                                <Bell size={20} className="text-gray-300" />
+                              </div>
+                              <p className="text-xs text-gray-400 font-medium">No pending requests</p>
+                            </div>
+                          )
+                        ) : (
+                          <div className="py-8 text-center">
+                            <p className="text-xs text-gray-400 font-medium">No new notifications</p>
+                          </div>
+                        )}
+                      </div>
+                      {user?.email === ADMIN_EMAIL && allUsers.length > 0 && (
+                        <button 
+                          onClick={() => {
+                            setActiveTab('User Management');
+                            setShowNotifications(false);
+                          }}
+                          className="w-full mt-4 py-3 bg-gray-50 text-gray-600 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-100 transition-all border border-gray-100"
+                        >
+                          Go to User Management
+                        </button>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
               <div className="relative">
                 <button 
@@ -2853,17 +3083,50 @@ function AppContent() {
                             className="w-full bg-gray-50 border border-gray-100 rounded-xl py-3 px-4 text-xs font-bold focus:outline-none focus:border-blue-500 transition-all"
                           />
                           <button 
-                            onClick={() => {
-                              if (newUsername) setLoginUsername(newUsername);
-                              if (settingsNewPassword) setLoginPassword(settingsNewPassword);
-                              setSuccessMessage('Login credentials updated!');
-                              setNewUsername('');
-                              setSettingsNewPassword('');
-                              setTimeout(() => setSuccessMessage(''), 3000);
+                            onClick={async () => {
+                              if (!auth.currentUser) return;
+                              
+                              setLoading(true);
+                              try {
+                                // Update Display Name in Firebase Auth
+                                if (newUsername) {
+                                  await updateProfile(auth.currentUser, {
+                                    displayName: newUsername
+                                  });
+                                  
+                                  // Update Display Name in Firestore
+                                  await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+                                    displayName: newUsername
+                                  });
+                                  
+                                  setProfile(prev => ({ ...prev, name: newUsername }));
+                                }
+                                
+                                // Update Password in Firebase Auth
+                                if (settingsNewPassword) {
+                                  await updatePassword(auth.currentUser, settingsNewPassword);
+                                }
+                                
+                                setSuccessMessage('Login credentials updated in Firebase!');
+                                setNewUsername('');
+                                setSettingsNewPassword('');
+                                setTimeout(() => setSuccessMessage(''), 3000);
+                              } catch (err: any) {
+                                console.error('Error updating credentials:', err);
+                                if (err.code === 'auth/requires-recent-login') {
+                                  setError('Please logout and login again to change your password for security.');
+                                } else {
+                                  setError('Failed to update credentials: ' + err.message);
+                                }
+                                setTimeout(() => setError(''), 5000);
+                              } finally {
+                                setLoading(false);
+                              }
                             }}
-                            className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all"
+                            disabled={loading}
+                            className={`w-full py-3 ${loading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all`}
                           >
-                            Update Login
+                            {loading ? 'Updating...' : 'Update Login'}
                           </button>
                         </div>
 
@@ -2923,7 +3186,64 @@ function AppContent() {
                       </div>
                     </div>
 
-                    <div className="bg-blue-600 rounded-3xl p-8 text-white relative overflow-hidden group">
+                    <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm mt-6">
+                      <div className="flex items-center space-x-3 mb-6">
+                        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600">
+                          <Mail size={20} />
+                        </div>
+                        <h3 className="font-black text-gray-800 uppercase tracking-widest text-xs">Email Notification Settings</h3>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
+                          Configure EmailJS to receive email notifications when new users sign up. 
+                          You can get these keys from your <a href="https://www.emailjs.com/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">EmailJS Dashboard</a>.
+                        </p>
+                        <div className="space-y-3">
+                          <input 
+                            type="text" 
+                            placeholder="EmailJS Service ID" 
+                            value={emailjsServiceId}
+                            onChange={(e) => setEmailjsServiceId(e.target.value)}
+                            className="w-full bg-gray-50 border border-gray-100 rounded-xl py-3 px-4 text-xs font-bold focus:outline-none focus:border-blue-500 transition-all"
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="EmailJS Template ID" 
+                            value={emailjsTemplateId}
+                            onChange={(e) => setEmailjsTemplateId(e.target.value)}
+                            className="w-full bg-gray-50 border border-gray-100 rounded-xl py-3 px-4 text-xs font-bold focus:outline-none focus:border-blue-500 transition-all"
+                          />
+                          <input 
+                            type="text" 
+                            placeholder="EmailJS Public Key" 
+                            value={emailjsPublicKey}
+                            onChange={(e) => setEmailjsPublicKey(e.target.value)}
+                            className="w-full bg-gray-50 border border-gray-100 rounded-xl py-3 px-4 text-xs font-bold focus:outline-none focus:border-blue-500 transition-all"
+                          />
+                          <button 
+                            onClick={async () => {
+                              try {
+                                await setDoc(doc(db, 'settings', 'emailjs_service_id'), { id: 'emailjs_service_id', value: emailjsServiceId, updatedAt: new Date().toISOString() });
+                                await setDoc(doc(db, 'settings', 'emailjs_template_id'), { id: 'emailjs_template_id', value: emailjsTemplateId, updatedAt: new Date().toISOString() });
+                                await setDoc(doc(db, 'settings', 'emailjs_public_key'), { id: 'emailjs_public_key', value: emailjsPublicKey, updatedAt: new Date().toISOString() });
+                                setSuccessMessage('Email settings saved to database!');
+                                setTimeout(() => setSuccessMessage(''), 3000);
+                              } catch (err) {
+                                console.error('Error saving email settings:', err);
+                                setError('Failed to save email settings');
+                                setTimeout(() => setError(''), 3000);
+                              }
+                            }}
+                            className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-blue-700 transition-all"
+                          >
+                            Save Email Settings
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-blue-600 rounded-3xl p-8 text-white relative overflow-hidden group mt-6">
                       <div className="absolute -right-4 -top-4 w-24 h-24 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
                       <div className="relative z-10">
                         <h4 className="text-lg font-black tracking-tight mb-2">Profit Upload</h4>
@@ -3925,8 +4245,12 @@ function AppContent() {
           className="w-full max-w-sm"
         >
           <div className="mb-10 text-center md:text-left">
-            <h2 className="text-3xl font-black text-gray-900 mb-2">Hello Again!</h2>
-            <p className="text-gray-500 font-medium">Welcome Back</p>
+            <h2 className="text-3xl font-black text-gray-900 mb-2">
+              {isLogin ? 'Hello Again!' : 'Create Account'}
+            </h2>
+            <p className="text-gray-500 font-medium">
+              {isLogin ? 'Welcome Back' : 'Join the NTN Management System'}
+            </p>
           </div>
 
           {!isResetMode ? (
@@ -3988,17 +4312,27 @@ function AppContent() {
                 disabled={loading}
                 className="w-full bg-[#007bff] hover:bg-[#0069d9] text-white font-bold py-4 rounded-full shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98] disabled:opacity-70"
               >
-                {loading ? 'Processing...' : 'Login'}
+                {loading ? 'Processing...' : (isLogin ? 'Login' : 'Sign Up')}
               </button>
 
-              <div className="text-center">
+              <div className="flex flex-col space-y-4 text-center">
                 <button 
                   type="button" 
-                  onClick={handleForgotPassword}
-                  className="text-sm text-gray-500 hover:text-blue-600 font-medium transition-colors"
+                  onClick={() => setIsLogin(!isLogin)}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-bold transition-colors"
                 >
-                  Forgot Password
+                  {isLogin ? "Don't have an account? Create one" : "Already have an account? Login"}
                 </button>
+                
+                {isLogin && (
+                  <button 
+                    type="button" 
+                    onClick={handleForgotPassword}
+                    className="text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors"
+                  >
+                    Forgot Password?
+                  </button>
+                )}
               </div>
 
               <div className="pt-4 flex items-center space-x-4">
