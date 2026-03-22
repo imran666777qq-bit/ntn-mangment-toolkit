@@ -1990,17 +1990,7 @@ function AppContent() {
                           </button>
                         )}
                         <button 
-                          onClick={async () => {
-                            if (confirm(`Are you sure you want to delete ${u.displayName}?`)) {
-                              try {
-                                await deleteDoc(doc(db, 'users', u.id));
-                                setSuccessMessage(`Deleted ${u.displayName}`);
-                                setTimeout(() => setSuccessMessage(''), 2000);
-                              } catch (err) {
-                                console.error('Error deleting user:', err);
-                              }
-                            }
-                          }}
+                          onClick={() => handleDeleteRecord('users', u.id)}
                           className="bg-gray-100 hover:bg-gray-200 text-gray-600 p-2 rounded-xl transition-all"
                         >
                           <Trash2 size={16} />
@@ -2058,33 +2048,33 @@ function AppContent() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.05 }}
-                            className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm hover:shadow-2xl hover:border-blue-200 transition-all group/item relative overflow-hidden"
+                            className="bg-[#1e293b] p-6 rounded-[32px] border border-white/5 shadow-sm hover:shadow-2xl hover:border-blue-500/30 transition-all group/item relative overflow-hidden text-white"
                           >
                             <div className="flex items-center justify-between mb-6">
                               <div className="flex items-center space-x-4">
-                                <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shadow-sm group-hover/item:scale-110 transition-transform">
+                                <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center text-blue-400 shadow-sm group-hover/item:scale-110 transition-transform">
                                   <Database size={22} />
                                 </div>
                                 <div>
-                                  <h4 className="text-lg font-black text-gray-800 tracking-tight truncate max-w-[200px]">{record.name}</h4>
+                                  <h4 className="text-lg font-black text-white tracking-tight truncate max-w-[200px]">{record.name}</h4>
                                   <div className="flex items-center space-x-2 mt-0.5">
-                                    <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">Ref: #{record.ref}</span>
+                                    <span className="text-[10px] font-black text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-lg uppercase tracking-wider">Ref: #{record.ref}</span>
                                     <div className={`w-1.5 h-1.5 rounded-full bg-${record.color}-500 animate-pulse`} />
-                                    <span className={`text-[10px] font-black text-${record.color}-600 uppercase tracking-widest`}>{record.status}</span>
+                                    <span className={`text-[10px] font-black text-${record.color}-400 uppercase tracking-widest`}>{record.status}</span>
                                   </div>
                                 </div>
                               </div>
                               <div className="flex items-center space-x-1">
                                 <button 
                                   onClick={() => handleEdit(record)}
-                                  className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                                  className="p-2.5 text-gray-400 hover:text-blue-400 hover:bg-white/5 rounded-xl transition-all"
                                   title="Edit"
                                 >
                                   <Edit2 size={16} />
                                 </button>
                                 <button 
                                   onClick={() => handleDeleteRecord('ntn_records', record.id)}
-                                  className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                                  className="p-2.5 text-gray-400 hover:text-red-400 hover:bg-white/5 rounded-xl transition-all"
                                   title="Delete"
                                 >
                                   <Trash2 size={16} />
@@ -2092,27 +2082,27 @@ function AppContent() {
                               </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4">
-                              <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-50 relative group/copy hover:bg-white hover:border-blue-100 transition-all">
+                              <div className="bg-white/5 p-4 rounded-2xl border border-white/5 relative group/copy hover:bg-white/10 hover:border-blue-500/30 transition-all">
                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">NTN Number</p>
                                 <div className="flex items-center justify-between">
-                                  <p className="text-sm font-mono font-bold text-gray-800">{record.ntn}</p>
+                                  <p className="text-sm font-mono font-bold text-white">{record.ntn}</p>
                                   <button 
                                     onClick={() => handleCopy(record.ntn, `${record.id}-ntn`)}
-                                    className="text-blue-400 hover:text-blue-600 transition-colors"
+                                    className="text-blue-400 hover:text-blue-300 transition-colors"
                                   >
-                                    {copiedId === `${record.id}-ntn` ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                                    {copiedId === `${record.id}-ntn` ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                                   </button>
                                 </div>
                               </div>
-                              <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-50 relative group/copy hover:bg-white hover:border-blue-100 transition-all">
+                              <div className="bg-white/5 p-4 rounded-2xl border border-white/5 relative group/copy hover:bg-white/10 hover:border-blue-500/30 transition-all">
                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">CNIC Number</p>
                                 <div className="flex items-center justify-between">
-                                  <p className="text-sm font-mono font-bold text-gray-800">{record.cnic}</p>
+                                  <p className="text-sm font-mono font-bold text-white">{record.cnic}</p>
                                   <button 
                                     onClick={() => handleCopy(record.cnic, `${record.id}-cnic`)}
-                                    className="text-blue-400 hover:text-blue-600 transition-colors"
+                                    className="text-blue-400 hover:text-blue-300 transition-colors"
                                   >
-                                    {copiedId === `${record.id}-cnic` ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                                    {copiedId === `${record.id}-cnic` ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
                                   </button>
                                 </div>
                               </div>
@@ -2786,39 +2776,39 @@ function AppContent() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: i * 0.05 }}
-                            className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm hover:shadow-xl hover:border-blue-100 transition-all group"
+                            className="bg-[#1e293b] p-6 rounded-[32px] border border-white/5 shadow-sm hover:shadow-xl hover:border-blue-500/30 transition-all group text-white"
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center space-x-4">
-                                <div className="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
+                                <div className="w-14 h-14 bg-blue-500/10 rounded-2xl flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
                                   <Database size={24} />
                                 </div>
                                 <div>
-                                  <h4 className="text-lg font-black text-gray-800 tracking-tight">{record.name}</h4>
+                                  <h4 className="text-lg font-black text-white tracking-tight">{record.name}</h4>
                                   <div className="flex items-center space-x-3 mt-1">
-                                    <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">Ref: #{record.ref}</span>
-                                    <span className={`text-[10px] font-black text-${record.color}-600 bg-${record.color}-50 px-2 py-0.5 rounded-lg uppercase tracking-wider`}>{record.status}</span>
+                                    <span className="text-[10px] font-black text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-lg uppercase tracking-wider">Ref: #{record.ref}</span>
+                                    <span className={`text-[10px] font-black text-${record.color}-400 bg-${record.color}-500/10 px-2 py-0.5 rounded-lg uppercase tracking-wider`}>{record.status}</span>
                                   </div>
                                 </div>
                               </div>
                               <div className="flex items-center space-x-2">
                                 <button 
                                   onClick={() => handleEdit(record)}
-                                  className="p-3 bg-gray-50 text-gray-400 hover:bg-blue-50 hover:text-blue-600 rounded-2xl transition-all"
+                                  className="p-3 bg-white/5 text-gray-400 hover:bg-white/10 hover:text-blue-400 rounded-2xl transition-all"
                                   title="Edit Record"
                                 >
                                   <Edit2 size={18} />
                                 </button>
                                 <button 
                                   onClick={() => handleViewDetails(record)}
-                                  className="p-3 bg-gray-50 text-gray-400 hover:bg-blue-50 hover:text-blue-600 rounded-2xl transition-all"
+                                  className="p-3 bg-white/5 text-gray-400 hover:bg-white/10 hover:text-blue-400 rounded-2xl transition-all"
                                   title="View Details"
                                 >
                                   <FileText size={18} />
                                 </button>
                                 <button 
                                   onClick={() => handleDeleteRecord('ntn_records', record.id)}
-                                  className="p-3 bg-gray-50 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all"
+                                  className="p-3 bg-white/5 text-gray-400 hover:text-red-400 hover:bg-white/10 rounded-2xl transition-all"
                                   title="Delete Record"
                                 >
                                   <Trash2 size={18} />
@@ -2827,20 +2817,20 @@ function AppContent() {
                             </div>
 
                             <div className="grid grid-cols-2 gap-4 mt-6">
-                              <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-50">
+                              <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">NTN Number</p>
                                 <div className="flex items-center justify-between">
-                                  <p className="text-sm font-mono font-bold text-gray-800">{record.ntn}</p>
-                                  <button onClick={() => handleCopy(record.ntn, `search-tab-ntn-${record.id}`)} className="text-blue-400 hover:text-blue-600 transition-colors">
+                                  <p className="text-sm font-mono font-bold text-white">{record.ntn}</p>
+                                  <button onClick={() => handleCopy(record.ntn, `search-tab-ntn-${record.id}`)} className="text-blue-400 hover:text-blue-300 transition-colors">
                                     {copiedId === `search-tab-ntn-${record.id}` ? <Check size={14} /> : <Copy size={14} />}
                                   </button>
                                 </div>
                               </div>
-                              <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-50">
+                              <div className="bg-white/5 p-4 rounded-2xl border border-white/5">
                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">CNIC / Registration</p>
                                 <div className="flex items-center justify-between">
-                                  <p className="text-sm font-mono font-bold text-gray-800">{record.cnic}</p>
-                                  <button onClick={() => handleCopy(record.cnic, `search-tab-cnic-${record.id}`)} className="text-blue-400 hover:text-blue-600 transition-colors">
+                                  <p className="text-sm font-mono font-bold text-white">{record.cnic}</p>
+                                  <button onClick={() => handleCopy(record.cnic, `search-tab-cnic-${record.id}`)} className="text-blue-400 hover:text-blue-300 transition-colors">
                                     {copiedId === `search-tab-cnic-${record.id}` ? <Check size={14} /> : <Copy size={14} />}
                                   </button>
                                 </div>
@@ -3949,7 +3939,6 @@ function AppContent() {
                           value={newRecord.ref}
                           onChange={(e) => setNewRecord({ ...newRecord, ref: e.target.value })}
                           className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-sm"
-                          required
                         />
                       </div>
                       <div className="space-y-2">
@@ -3962,7 +3951,6 @@ function AppContent() {
                           value={newRecord.name}
                           onChange={(e) => setNewRecord({ ...newRecord, name: e.target.value })}
                           className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium text-sm"
-                          required
                         />
                       </div>
                       <div className="space-y-2">
@@ -3975,7 +3963,6 @@ function AppContent() {
                           value={newRecord.ntn}
                           onChange={(e) => setNewRecord({ ...newRecord, ntn: e.target.value })}
                           className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-sm"
-                          required
                         />
                       </div>
                       <div className="space-y-2">
@@ -3988,7 +3975,6 @@ function AppContent() {
                           value={newRecord.cnic}
                           onChange={(e) => setNewRecord({ ...newRecord, cnic: e.target.value })}
                           className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-mono text-sm"
-                          required
                         />
                       </div>
                     </div>
