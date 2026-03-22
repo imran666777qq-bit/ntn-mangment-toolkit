@@ -126,6 +126,13 @@ function AppContent() {
   }, [user]);
   const [showScreenLock, setShowScreenLock] = useState(false);
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
   const [showLogoutDropdown, setShowLogoutDropdown] = useState(false);
   const [profile, setProfile] = useState(() => {
     const saved = localStorage.getItem('userProfile');
@@ -152,6 +159,7 @@ function AppContent() {
     const saved = localStorage.getItem('autoLogoutMinutes');
     return saved ? parseInt(saved) : 10;
   });
+  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('autoLogoutMinutes', autoLogoutMinutes.toString());
@@ -168,7 +176,6 @@ function AppContent() {
   useEffect(() => {
     localStorage.setItem('lastLogin', lastLogin);
   }, [lastLogin]);
-  const [copiedText, setCopiedText] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [editingRecord, setEditingRecord] = useState<any>(null);
@@ -917,16 +924,19 @@ function AppContent() {
   const confirmDeleteRecord = async () => {
     if (!user || !recordToDelete) return;
     
+    // Optimistic UI update: Close modal and show success immediately
+    const { collectionName, id } = recordToDelete;
+    setIsDeleteModalOpen(false);
+    setRecordToDelete(null);
+    setSuccessMessage('Record deleted successfully');
+    setTimeout(() => setSuccessMessage(''), 3000);
+
     try {
-      const docRef = doc(db, recordToDelete.collectionName, recordToDelete.id);
+      const docRef = doc(db, collectionName, id);
       await deleteDoc(docRef);
-      setSuccessMessage('Record deleted successfully');
-      setIsDeleteModalOpen(false);
-      setRecordToDelete(null);
-      setTimeout(() => setSuccessMessage(''), 3000);
     } catch (err) {
       console.error('Error deleting record:', err);
-      setError('Failed to delete record.');
+      setError('Failed to delete record from database.');
     }
   };
 
@@ -1024,8 +1034,9 @@ function AppContent() {
     }
 
     try {
-      await addDoc(collection(db, collectionName), newEntry);
+      // Optimistic UI update: Close modal, reset form, and show success immediately
       setIsAddModalOpen(false);
+      const addedTab = activeTab;
       setNewRecord({
         ref: '',
         name: '',
@@ -1034,11 +1045,13 @@ function AppContent() {
         status: 'Active',
         color: 'emerald'
       });
-      setSuccessMessage(`New record added to ${activeTab} successfully`);
+      setSuccessMessage(`New record added to ${addedTab} successfully`);
       setTimeout(() => setSuccessMessage(''), 3000);
+
+      await addDoc(collection(db, collectionName), newEntry);
     } catch (err) {
       console.error('Error adding record:', err);
-      setError('Failed to add record.');
+      setError('Failed to add record to database.');
     }
   };
 
@@ -1103,11 +1116,7 @@ function AppContent() {
     );
   });
 
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedText(text);
-    setTimeout(() => setCopiedText(null), 2000);
-  };
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1306,9 +1315,19 @@ function AppContent() {
         </AnimatePresence>
 
         {/* Sidebar */}
-        <aside className="w-64 bg-[#1e293b] text-white flex flex-col shadow-xl z-20">
-          <div className="p-6 flex items-center space-x-3 border-b border-white/5">
-            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-lg overflow-hidden p-1">
+        <motion.aside 
+          initial={false}
+          animate={{ width: isSidebarHovered ? 260 : 80 }}
+          onMouseEnter={() => setIsSidebarHovered(true)}
+          onMouseLeave={() => {
+            setIsSidebarHovered(false);
+            setShowScreenLock(false);
+            setShowLogoutDropdown(false);
+          }}
+          className="bg-[#1e293b] text-white flex flex-col shadow-2xl z-20 relative overflow-hidden transition-all duration-300 ease-in-out"
+        >
+          <div className={`p-6 flex items-center ${isSidebarHovered ? 'space-x-3' : 'justify-center'} border-b border-white/5 h-20`}>
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg overflow-hidden p-1 shrink-0">
               <img 
                 src="https://www.vectorlogo.zone/logos/fedex/fedex-ar21.svg" 
                 alt="FedEx Logo" 
@@ -1316,10 +1335,19 @@ function AppContent() {
                 referrerPolicy="no-referrer"
               />
             </div>
-            <span className="font-bold text-xs tracking-tight leading-tight">ɴᴛɴ ꜱᴇᴀʀᴄʜ &<br />ᴍᴀɴᴀɢᴇᴍᴇɴᴛ ᴛᴏᴏʟ</span>
+            {isSidebarHovered && (
+              <motion.span 
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="font-black text-[10px] uppercase tracking-tighter leading-tight text-blue-400"
+              >
+                ɴᴛɴ ꜱʏꜱᴛᴇᴍ<br />
+                <span className="text-white opacity-50">ᴍᴀɴᴀɢᴇᴍᴇɴᴛ</span>
+              </motion.span>
+            )}
           </div>
 
-          <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto custom-scrollbar">
+          <nav className="flex-1 py-8 px-3 space-y-4 overflow-y-auto custom-scrollbar overflow-x-hidden">
             {[
               { icon: LayoutDashboard, label: 'Dashboard' },
               { icon: Search, label: 'NTN Search' },
@@ -1347,29 +1375,55 @@ function AppContent() {
                       setActiveTab(item.label);
                     }
                   }}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all group ${
+                  className={`w-full flex items-center ${isSidebarHovered ? 'px-4' : 'justify-center'} py-3 rounded-2xl transition-all group relative ${
                     activeTab === item.label 
-                      ? 'bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-inner' 
-                      : 'text-gray-400 hover:bg-white/5 hover:text-white'
+                      ? 'text-white' 
+                      : 'text-gray-400 hover:text-white'
                   }`}
+                  title={!isSidebarHovered ? item.label : ''}
                 >
-                  <item.icon size={18} className={activeTab === item.label ? 'text-blue-400' : 'text-gray-500 group-hover:text-white'} />
-                  <span className="font-medium text-sm">{item.label}</span>
-                  {item.label === 'NTN Search' && <span className="ml-auto text-[10px] opacity-50">®</span>}
-                  {item.hasSubmenu && (
+                  <div className={`shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-all duration-300 ${
+                    activeTab === item.label 
+                      ? 'bg-blue-600 shadow-lg shadow-blue-600/40 scale-110' 
+                      : 'bg-white/5 group-hover:bg-white/10'
+                  }`}>
+                    <item.icon size={22} className={activeTab === item.label ? 'text-white' : 'text-gray-400 group-hover:text-white'} />
+                  </div>
+                  
+                  {isSidebarHovered && (
+                    <motion.span 
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="ml-4 font-bold text-sm whitespace-nowrap"
+                    >
+                      {item.label}
+                    </motion.span>
+                  )}
+
+                  {isSidebarHovered && item.label === 'NTN Search' && <span className="ml-auto text-[10px] opacity-50">®</span>}
+                  
+                  {isSidebarHovered && item.hasSubmenu && (
                     <ChevronRight size={14} className={`ml-auto transition-transform ${showScreenLock ? 'rotate-90' : ''}`} />
                   )}
-                  {item.hasArrow && (
+                  
+                  {isSidebarHovered && item.hasArrow && (
                     <ChevronDown size={14} className={`ml-auto transition-transform ${showLogoutDropdown ? 'rotate-180' : ''}`} />
+                  )}
+
+                  {!isSidebarHovered && activeTab === item.label && (
+                    <motion.div 
+                      layoutId="active-indicator"
+                      className="absolute left-0 w-1 h-6 bg-white rounded-r-full"
+                    />
                   )}
                 </button>
 
-                {item.label === 'Security' && showScreenLock && (
+                {isSidebarHovered && item.label === 'Security' && showScreenLock && (
                   <motion.div 
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="pl-10 space-y-1 overflow-hidden"
+                    className="pl-12 space-y-1 overflow-hidden"
                   >
                     <button 
                       onClick={() => setIsScreenLocked(true)}
@@ -1398,12 +1452,12 @@ function AppContent() {
                   </motion.div>
                 )}
 
-                {item.label === 'Logout' && showLogoutDropdown && (
+                {isSidebarHovered && item.label === 'Logout' && showLogoutDropdown && (
                   <motion.div 
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="pl-10 space-y-1 overflow-hidden"
+                    className="pl-12 space-y-1 overflow-hidden"
                   >
                     <button 
                       onClick={handleLogout}
@@ -1426,46 +1480,50 @@ function AppContent() {
           </nav>
 
           <div className="p-4 border-t border-white/5 bg-[#1a2233]">
-            <div className="flex items-center space-x-3 px-4 py-2">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <div className={`flex items-center ${isSidebarHovered ? 'space-x-3 px-4' : 'justify-center'} py-2`}>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20 shrink-0">
                 <UserCircle size={24} className="text-white" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold truncate text-white">{profile.name}</p>
-                <p className="text-[10px] text-gray-500 truncate uppercase tracking-widest font-black">Administrator</p>
-              </div>
+              {isSidebarHovered && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold truncate text-white">{profile.name}</p>
+                  <p className="text-[10px] text-gray-500 truncate uppercase tracking-widest font-black">Administrator</p>
+                </div>
+              )}
             </div>
           </div>
-        </aside>
+        </motion.aside>
 
         {/* Main Content */}
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Top Header */}
           <header className="h-20 bg-white border-b border-gray-200 px-8 flex items-center justify-between z-10">
-            <h1 className="text-xl font-bold text-gray-800">NTN Management System</h1>
+            <div className="flex flex-1 items-center space-x-8">
+              <h1 className="text-xl font-black text-gray-800 shrink-0 tracking-tight">NTN <span className="text-blue-600">SYSTEM</span></h1>
+            </div>
             
-            <div className="flex items-center space-x-6">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
-                  <Bell size={18} />
+            <div className="flex items-center space-x-6 ml-8">
+              <div className="flex items-center">
+                <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 cursor-pointer hover:bg-blue-100 transition-colors">
+                  <Bell size={20} />
                 </div>
               </div>
               <div className="relative">
                 <button 
                   onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                  className="flex items-center space-x-3 pl-6 border-l border-gray-200 hover:bg-gray-50/50 p-2 rounded-2xl transition-all group"
+                  className="flex items-center space-x-4 pl-6 border-l border-gray-200 hover:bg-gray-50/50 p-2 rounded-2xl transition-all group"
                 >
                   <div className="text-right">
-                    <p className="text-sm font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent italic tracking-tight">
+                    <p className="text-sm font-bold text-blue-600">
                       {profile.name}
                     </p>
-                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-[0.2em]">Administrator</p>
+                    <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Administrator</p>
                   </div>
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 p-0.5 shadow-lg shadow-blue-500/20 group-hover:scale-105 transition-transform">
+                  <div className="w-11 h-11 rounded-full border-2 border-blue-100 p-0.5 group-hover:border-blue-300 transition-colors">
                     <img 
                       src={profile.photoURL} 
                       alt="User" 
-                      className="w-full h-full rounded-full bg-white border border-white/50"
+                      className="w-full h-full rounded-full object-cover"
                     />
                   </div>
                   <ChevronDown size={16} className={`text-gray-400 transition-transform duration-300 ${showProfileDropdown ? 'rotate-180' : ''}`} />
@@ -1537,211 +1595,136 @@ function AppContent() {
           <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             {activeTab === 'Dashboard' && (
               <>
-                {/* Search Bar */}
-                <div className="mb-8 flex items-center space-x-4 relative">
-              <div className="flex-1 relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input 
-                  type="text" 
-                  placeholder="Search by Ref, Tracking, Company or Name"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setShowSuggestions(true);
-                    setActiveSuggestionIndex(-1);
-                  }}
-                  onFocus={() => setShowSuggestions(true)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowDown') {
-                      e.preventDefault();
-                      setActiveSuggestionIndex(prev => 
-                        prev < suggestions.length - 1 ? prev + 1 : prev
-                      );
-                    } else if (e.key === 'ArrowUp') {
-                      e.preventDefault();
-                      setActiveSuggestionIndex(prev => 
-                        prev > 0 ? prev - 1 : -1
-                      );
-                    } else if (e.key === 'Enter' && activeSuggestionIndex >= 0) {
-                      e.preventDefault();
-                      const s = suggestions[activeSuggestionIndex];
-                      setSearchQuery(s.title);
-                      setShowSuggestions(false);
-                      if (s.type === 'NTN') handleEdit(s.data);
-                    } else if (e.key === 'Escape') {
-                      setShowSuggestions(false);
-                    }
-                  }}
-                  className="w-full pl-12 pr-4 py-3.5 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
-                />
-
-                {/* Suggestions Dropdown */}
-                <AnimatePresence>
-                  {showSuggestions && suggestions.length > 0 && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-50 overflow-hidden"
-                    >
-                      {suggestions.map((s, i) => (
-                        <button 
-                          key={i}
-                          onClick={() => {
-                            setSearchQuery(s.title);
-                            setShowSuggestions(false);
-                            if (s.type === 'NTN') handleEdit(s.data);
-                          }}
-                          onMouseEnter={() => setActiveSuggestionIndex(i)}
-                          className={`w-full flex items-center justify-between p-3 rounded-xl transition-all text-left group ${
-                            activeSuggestionIndex === i ? 'bg-blue-50' : 'hover:bg-gray-50'
-                          }`}
-                        >
-                          <div className="flex items-center space-x-3">
-                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                              s.type === 'NTN' ? 'bg-blue-50 text-blue-500' : 
-                              s.type === 'HS' ? 'bg-purple-50 text-purple-500' : 'bg-gray-50 text-gray-500'
-                            }`}>
-                              {s.type === 'NTN' ? <Database size={16} /> : <Hash size={16} />}
-                            </div>
-                            <div>
-                              <p className="text-sm font-bold text-gray-800">{s.title}</p>
-                              <p className="text-[10px] text-gray-400 font-medium">{s.subtitle}</p>
-                            </div>
-                          </div>
-                          <ChevronRight size={14} className="text-gray-300 group-hover:text-blue-500 transition-colors" />
-                        </button>
-                      ))}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-              <button className="bg-blue-600 text-white px-8 py-3.5 rounded-2xl font-bold flex items-center space-x-2 hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20">
-                <span>Search</span>
-                <Search size={18} />
-              </button>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-4 gap-6 mb-8">
-              {[
-                { label: 'NTN Total Records', value: ntnRecords.length.toLocaleString(), icon: FileText, color: 'blue', bg: 'bg-blue-50/50', border: 'border-blue-200/50', iconBg: 'bg-blue-500', shadow: 'shadow-blue-900/5' },
-                { label: 'HS Code Verification', value: hsCodeRecords.length.toLocaleString(), icon: BarChart3, color: 'purple', bg: 'bg-purple-50/50', border: 'border-purple-200/50', iconBg: 'bg-purple-500', shadow: 'shadow-purple-900/5' },
-                { label: 'NTN Missing', value: ntnMissingRecords.length.toLocaleString(), icon: AlertTriangle, color: 'orange', bg: 'bg-orange-50/50', border: 'border-orange-200/50', iconBg: 'bg-orange-500', shadow: 'shadow-orange-900/5' },
-                { label: 'Bucket Shops', value: bucketShopRecords.length.toLocaleString(), icon: Store, color: 'teal', bg: 'bg-teal-50/50', border: 'border-teal-200/50', iconBg: 'bg-teal-500', shadow: 'shadow-teal-900/5' },
-              ].map((stat, i) => (
-                <div key={i} className={`${stat.bg} backdrop-blur-xl border ${stat.border} p-6 rounded-[24px] text-gray-800 ${stat.shadow} relative overflow-hidden group transition-all hover:scale-[1.02] hover:shadow-2xl`}>
-                  <div className={`absolute -right-4 -top-4 w-24 h-24 ${stat.iconBg} opacity-5 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700`} />
-                  <div className="relative z-10 flex items-start justify-between mb-4">
-                    <div className={`w-12 h-12 ${stat.iconBg} rounded-xl flex items-center justify-center text-white shadow-lg shadow-current/20`}>
-                      <stat.icon size={24} />
+                {/* New Search Bar Section (Moved from header) */}
+                <div className="mb-10">
+                  <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100 flex items-center space-x-4">
+                    <div className="flex-1 relative group">
+                      <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={20} />
+                      <input 
+                        type="text" 
+                        placeholder="Search NTN, CNIC or Company Name..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full pl-14 pr-6 py-4 bg-gray-50 border border-transparent rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:bg-white focus:border-blue-500 transition-all text-lg font-bold text-gray-800 placeholder:text-gray-300"
+                      />
                     </div>
-                  </div>
-                  <div className="relative z-10">
-                    <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-1">{stat.label}</p>
-                    <div className="flex items-baseline space-x-2">
-                      <h3 className="text-3xl font-bold tracking-tight text-gray-800">{stat.value}</h3>
-                      <span className="text-[10px] text-gray-400 uppercase font-bold">Results</span>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Quick NTN Search Engine */}
-            <div className="bg-white rounded-[32px] p-8 shadow-sm border border-gray-100 mb-8 overflow-hidden relative group">
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-blue-50 rounded-full blur-3xl opacity-50 group-hover:scale-150 transition-transform duration-700" />
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-8">
-                  <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
-                      <Database size={24} />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-black text-gray-800 tracking-tight">NTN Search Engine</h3>
-                      <p className="text-[10px] text-gray-400 font-medium mt-0.5 uppercase tracking-widest">Scan database for company tax details</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
                     <button 
-                      onClick={() => setActiveTab('NTN Search')}
-                      className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-bold hover:bg-blue-100 transition-all uppercase tracking-widest"
+                      onClick={() => searchQuery.length > 0 ? null : setActiveTab('NTN Search')}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-black text-sm tracking-widest transition-all active:scale-95 shadow-lg shadow-blue-600/20"
                     >
-                      Advanced Search
+                      SEARCH
                     </button>
                   </div>
                 </div>
 
-                <div className="relative mb-8">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                  <input 
-                    type="text" 
-                    placeholder="Search by Ref, NTN, CNIC or Company Name..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-bold text-sm"
-                  />
-                </div>
-
+                {/* Search Results (if query exists) */}
                 {searchQuery.length > 0 && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
-                    {filteredNtnRecords.length > 0 ? (
-                      filteredNtnRecords.map((record, i) => (
-                        <motion.div 
-                          key={record.id}
-                          initial={{ opacity: 0, x: -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: i * 0.05 }}
-                          className="bg-gray-50/50 p-5 rounded-2xl border border-gray-50 hover:bg-white hover:shadow-xl hover:border-blue-100 transition-all group/item"
-                        >
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center space-x-3">
-                              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-blue-600 shadow-sm group-hover/item:scale-110 transition-transform">
-                                <Database size={18} />
+                  <div className="mb-10 animate-in fade-in slide-in-from-top-4 duration-500">
+                    <div className="flex items-center justify-between px-4 mb-6">
+                      <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">Search Results ({filteredNtnRecords.length})</h3>
+                      <div className="h-px flex-1 bg-gray-100 mx-6" />
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {filteredNtnRecords.length > 0 ? (
+                        filteredNtnRecords.map((record, i) => (
+                          <motion.div 
+                            key={record.id}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: i * 0.05 }}
+                            className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm hover:shadow-2xl hover:border-blue-200 transition-all group/item relative overflow-hidden"
+                          >
+                            <div className="flex items-center justify-between mb-6">
+                              <div className="flex items-center space-x-4">
+                                <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 shadow-sm group-hover/item:scale-110 transition-transform">
+                                  <Database size={22} />
+                                </div>
+                                <div>
+                                  <h4 className="text-lg font-black text-gray-800 tracking-tight truncate max-w-[200px]">{record.name}</h4>
+                                  <div className="flex items-center space-x-2 mt-0.5">
+                                    <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg uppercase tracking-wider">Ref: #{record.ref}</span>
+                                    <div className={`w-1.5 h-1.5 rounded-full bg-${record.color}-500 animate-pulse`} />
+                                    <span className={`text-[10px] font-black text-${record.color}-600 uppercase tracking-widest`}>{record.status}</span>
+                                  </div>
+                                </div>
                               </div>
-                              <div>
-                                <h4 className="text-sm font-black text-gray-800 tracking-tight truncate max-w-[150px]">{record.name}</h4>
-                                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">Ref: #{record.ref}</p>
+                              <div className="flex items-center space-x-1">
+                                <button 
+                                  onClick={() => handleEdit(record)}
+                                  className="p-2.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                                  title="Edit"
+                                >
+                                  <Edit2 size={16} />
+                                </button>
+                                <button 
+                                  onClick={() => handleDeleteRecord('ntn_records', record.id)}
+                                  className="p-2.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                                  title="Delete"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
                               </div>
                             </div>
-                            <div className="flex items-center space-x-1">
-                              <button 
-                                onClick={() => handleEdit(record)}
-                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                title="Edit"
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                              <button 
-                                onClick={() => handleDeleteRecord('ntn_records', record.id)}
-                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all"
-                                title="Delete"
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-50 relative group/copy hover:bg-white hover:border-blue-100 transition-all">
+                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">NTN Number</p>
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm font-mono font-bold text-gray-800">{record.ntn}</p>
+                                  <button 
+                                    onClick={() => handleCopy(record.ntn, `${record.id}-ntn`)}
+                                    className="text-blue-400 hover:text-blue-600 transition-colors"
+                                  >
+                                    {copiedId === `${record.id}-ntn` ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="bg-gray-50/50 p-4 rounded-2xl border border-gray-50 relative group/copy hover:bg-white hover:border-blue-100 transition-all">
+                                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">CNIC Number</p>
+                                <div className="flex items-center justify-between">
+                                  <p className="text-sm font-mono font-bold text-gray-800">{record.cnic}</p>
+                                  <button 
+                                    onClick={() => handleCopy(record.cnic, `${record.id}-cnic`)}
+                                    className="text-blue-400 hover:text-blue-600 transition-colors"
+                                  >
+                                    {copiedId === `${record.id}-cnic` ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                                  </button>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="bg-white p-2.5 rounded-xl border border-gray-50">
-                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">NTN</p>
-                              <p className="text-[11px] font-mono font-bold text-gray-800">{record.ntn}</p>
-                            </div>
-                            <div className="bg-white p-2.5 rounded-xl border border-gray-50">
-                              <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-0.5">CNIC</p>
-                              <p className="text-[11px] font-mono font-bold text-gray-800">{record.cnic}</p>
-                            </div>
-                          </div>
-                        </motion.div>
-                      ))
-                    ) : (
-                      <div className="col-span-2 py-10 text-center">
-                        <p className="text-xs text-gray-400 font-bold italic">No records found for "{searchQuery}"</p>
-                      </div>
-                    )}
+                          </motion.div>
+                        ))
+                      ) : (
+                        <div className="col-span-2 py-16 text-center bg-white rounded-[40px] border border-dashed border-gray-200">
+                          <Search size={48} className="mx-auto text-gray-200 mb-4" />
+                          <p className="text-lg font-bold text-gray-400">No records found for "{searchQuery}"</p>
+                          <p className="text-xs text-gray-300 uppercase tracking-widest mt-1">Try searching with a different keyword</p>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
-              </div>
-            </div>
+
+                {/* Stats Cards */}
+                <div className="grid grid-cols-4 gap-6 mb-10">
+                  {[
+                    { label: 'NTN TOTAL RECORDS', value: ntnRecords.length.toLocaleString(), icon: FileText, color: 'blue', bg: 'bg-blue-50/50', iconBg: 'bg-blue-500' },
+                    { label: 'HS CODE VERIFICATION', value: hsCodeRecords.length.toLocaleString(), icon: BarChart3, color: 'purple', bg: 'bg-purple-50/50', iconBg: 'bg-purple-500' },
+                    { label: 'NTN MISSING', value: ntnMissingRecords.length.toLocaleString(), icon: AlertTriangle, color: 'orange', bg: 'bg-orange-50/50', iconBg: 'bg-orange-500' },
+                    { label: 'BUCKET SHOPS', value: bucketShopRecords.length.toLocaleString(), icon: Store, color: 'teal', bg: 'bg-teal-50/50', iconBg: 'bg-teal-500' },
+                  ].map((stat, i) => (
+                    <div key={i} className={`${stat.bg} border border-gray-100 p-8 rounded-[32px] flex flex-col items-center text-center transition-all hover:shadow-xl hover:-translate-y-1 group`}>
+                      <div className={`w-14 h-14 ${stat.iconBg} rounded-2xl flex items-center justify-center text-white shadow-lg shadow-current/20 mb-6 group-hover:scale-110 transition-transform`}>
+                        <stat.icon size={28} />
+                      </div>
+                      <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-2">{stat.label}</p>
+                      <div className="flex items-baseline space-x-1">
+                        <h3 className="text-4xl font-black tracking-tight text-gray-800">{stat.value}</h3>
+                        <span className="text-[10px] text-gray-400 uppercase font-bold">Results</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
             {/* Unified Data Table */}
             <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100">
@@ -1781,10 +1764,12 @@ function AppContent() {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {filteredNtnRecords.length > 0 ? (
-                      filteredNtnRecords.map((row, i) => (
+                      filteredNtnRecords.slice(0, 5).map((row, i) => (
                         <tr key={i} className="group hover:bg-gray-50/50 transition-all">
                           <td className="py-3 pl-4">
-                            <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-lg">#{row.ref}</span>
+                            <div className="flex items-center space-x-2 group/copy">
+                              <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-lg">#{row.ref}</span>
+                            </div>
                           </td>
                           <td className="py-3">
                             <p className="text-xs font-bold text-gray-800">{row.name}</p>
@@ -1793,10 +1778,10 @@ function AppContent() {
                             <div className="flex items-center space-x-2 group/copy">
                               <span className="text-[11px] text-gray-500 font-mono font-medium">{row.ntn}</span>
                               <button 
-                                onClick={() => handleCopy(row.ntn)}
+                                onClick={() => handleCopy(row.ntn, `recent-ntn-${row.id}`)}
                                 className="p-1 hover:bg-blue-50 rounded text-blue-400 hover:text-blue-600 transition-all opacity-0 group-hover/copy:opacity-100"
                               >
-                                {copiedText === row.ntn ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
+                                {copiedId === `recent-ntn-${row.id}` ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
                               </button>
                             </div>
                           </td>
@@ -1804,10 +1789,10 @@ function AppContent() {
                             <div className="flex items-center space-x-2 group/copy">
                               <span className="text-[11px] text-gray-500 font-mono font-medium">{row.cnic}</span>
                               <button 
-                                onClick={() => handleCopy(row.cnic)}
+                                onClick={() => handleCopy(row.cnic, `recent-cnic-${row.id}`)}
                                 className="p-1 hover:bg-blue-50 rounded text-blue-400 hover:text-blue-600 transition-all opacity-0 group-hover/copy:opacity-100"
                               >
-                                {copiedText === row.cnic ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
+                                {copiedId === `recent-cnic-${row.id}` ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
                               </button>
                             </div>
                           </td>
@@ -1896,6 +1881,13 @@ function AppContent() {
                           <td className="py-3 pl-4">
                             <div className="flex items-center space-x-2 group/copy">
                               <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-lg">{row.tracking}</span>
+                              <button 
+                                onClick={() => handleCopy(row.tracking, `hs-tracking-${i}`)}
+                                className="opacity-0 group-hover/copy:opacity-100 p-1 text-gray-400 hover:text-blue-600 transition-all"
+                                title="Copy Tracking Number"
+                              >
+                                {copiedId === `hs-tracking-${i}` ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                              </button>
                             </div>
                           </td>
                           <td className="py-3">
@@ -1974,6 +1966,13 @@ function AppContent() {
                           <td className="py-3 pl-4">
                             <div className="flex items-center space-x-2 group/copy">
                               <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-lg">{row.tracking}</span>
+                              <button 
+                                onClick={() => handleCopy(row.tracking, `missing-tracking-${i}`)}
+                                className="opacity-0 group-hover/copy:opacity-100 p-1 text-gray-400 hover:text-blue-600 transition-all"
+                                title="Copy Tracking Number"
+                              >
+                                {copiedId === `missing-tracking-${i}` ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                              </button>
                             </div>
                           </td>
                           <td className="py-3">
@@ -2049,10 +2048,10 @@ function AppContent() {
                             <div className="flex items-center space-x-2 group/copy">
                               <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-lg">{row.tracking}</span>
                               <button 
-                                onClick={() => handleCopy(row.tracking)}
+                                onClick={() => handleCopy(row.tracking, `auto-update-tracking-${row.id}`)}
                                 className="p-1 hover:bg-blue-50 rounded text-blue-400 hover:text-blue-600 transition-all opacity-0 group-hover/copy:opacity-100"
                               >
-                                {copiedText === row.tracking ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
+                                {copiedId === `auto-update-tracking-${row.id}` ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
                               </button>
                             </div>
                           </td>
@@ -2063,10 +2062,10 @@ function AppContent() {
                             <div className="flex items-center space-x-2 group/copy">
                               <span className="text-[11px] text-gray-500 font-mono font-medium">{row.ntn}</span>
                               <button 
-                                onClick={() => handleCopy(row.ntn)}
+                                onClick={() => handleCopy(row.ntn, `auto-update-ntn-${row.id}`)}
                                 className="p-1 hover:bg-blue-50 rounded text-blue-400 hover:text-blue-600 transition-all opacity-0 group-hover/copy:opacity-100"
                               >
-                                {copiedText === row.ntn ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
+                                {copiedId === `auto-update-ntn-${row.id}` ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
                               </button>
                             </div>
                           </td>
@@ -2138,10 +2137,10 @@ function AppContent() {
                             <div className="flex items-center space-x-2 group/copy">
                               <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-lg">{row.tracking}</span>
                               <button 
-                                onClick={() => handleCopy(row.tracking)}
+                                onClick={() => handleCopy(row.tracking, `bucket-tracking-${row.id}`)}
                                 className="p-1 hover:bg-blue-50 rounded text-blue-400 hover:text-blue-600 transition-all opacity-0 group-hover/copy:opacity-100"
                               >
-                                {copiedText === row.tracking ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
+                                {copiedId === `bucket-tracking-${row.id}` ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
                               </button>
                             </div>
                           </td>
@@ -2219,10 +2218,10 @@ function AppContent() {
                             <div className="flex items-center space-x-2 group/copy">
                               <span className="text-[10px] font-mono font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-lg">{row.tracking}</span>
                               <button 
-                                onClick={() => handleCopy(row.tracking)}
+                                onClick={() => handleCopy(row.tracking, `diff-tracking-${row.id}`)}
                                 className="p-1 hover:bg-blue-50 rounded text-blue-400 hover:text-blue-600 transition-all opacity-0 group-hover/copy:opacity-100"
                               >
-                                {copiedText === row.tracking ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
+                                {copiedId === `diff-tracking-${row.id}` ? <Check size={10} className="text-emerald-500" /> : <Copy size={10} />}
                               </button>
                             </div>
                           </td>
@@ -2407,8 +2406,8 @@ function AppContent() {
                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">NTN Number</p>
                                 <div className="flex items-center justify-between">
                                   <p className="text-sm font-mono font-bold text-gray-800">{record.ntn}</p>
-                                  <button onClick={() => handleCopy(record.ntn)} className="text-blue-400 hover:text-blue-600 transition-colors">
-                                    {copiedText === record.ntn ? <Check size={14} /> : <Copy size={14} />}
+                                  <button onClick={() => handleCopy(record.ntn, `search-tab-ntn-${record.id}`)} className="text-blue-400 hover:text-blue-600 transition-colors">
+                                    {copiedId === `search-tab-ntn-${record.id}` ? <Check size={14} /> : <Copy size={14} />}
                                   </button>
                                 </div>
                               </div>
@@ -2416,8 +2415,8 @@ function AppContent() {
                                 <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">CNIC / Registration</p>
                                 <div className="flex items-center justify-between">
                                   <p className="text-sm font-mono font-bold text-gray-800">{record.cnic}</p>
-                                  <button onClick={() => handleCopy(record.cnic)} className="text-blue-400 hover:text-blue-600 transition-colors">
-                                    {copiedText === record.cnic ? <Check size={14} /> : <Copy size={14} />}
+                                  <button onClick={() => handleCopy(record.cnic, `search-tab-cnic-${record.id}`)} className="text-blue-400 hover:text-blue-600 transition-colors">
+                                    {copiedId === `search-tab-cnic-${record.id}` ? <Check size={14} /> : <Copy size={14} />}
                                   </button>
                                 </div>
                               </div>
@@ -2612,7 +2611,7 @@ function AppContent() {
                       </div>
                       <div className="space-y-3">
                         {loginHistory.length > 0 ? (
-                          loginHistory.map((login: any) => (
+                          loginHistory.slice(0, 5).map((login: any) => (
                             <div key={login.id} className="flex items-center justify-between p-3 bg-white rounded-2xl border border-gray-100">
                               <div>
                                 <p className="text-xs font-bold text-gray-700">Login Successful</p>
@@ -3336,11 +3335,11 @@ function AppContent() {
                           />
                           <button 
                             type="button"
-                            onClick={() => handleCopy(editingRecord.ntn || '')}
+                            onClick={() => handleCopy(editingRecord.ntn || '', 'edit-modal-ntn')}
                             className="absolute right-2 top-1/2 -translate-y-1/2 p-2 hover:bg-white rounded-lg text-gray-400 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:text-blue-600 transition-all shadow-sm border border-transparent hover:border-gray-100"
                             title="Copy NTN"
                           >
-                            {copiedText === editingRecord.ntn ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                            {copiedId === 'edit-modal-ntn' ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                           </button>
                         </div>
                       </div>
@@ -3355,11 +3354,11 @@ function AppContent() {
                           />
                           <button 
                             type="button"
-                            onClick={() => handleCopy(editingRecord.cnic || '')}
+                            onClick={() => handleCopy(editingRecord.cnic || '', 'edit-modal-cnic')}
                             className="absolute right-2 top-1/2 -translate-y-1/2 p-2 hover:bg-white rounded-lg text-gray-400 hover:text-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:text-blue-600 transition-all shadow-sm border border-transparent hover:border-gray-100"
                             title="Copy CNIC"
                           >
-                            {copiedText === editingRecord.cnic ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                            {copiedId === 'edit-modal-cnic' ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
                           </button>
                         </div>
                       </div>
