@@ -291,6 +291,7 @@ function AppContent() {
   });
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [logoStyle, setLogoStyle] = useState(0);
+  const [headerColorStyle, setHeaderColorStyle] = useState(0);
 
   useEffect(() => {
     localStorage.setItem('autoLogoutMinutes', autoLogoutMinutes.toString());
@@ -411,16 +412,52 @@ function AppContent() {
     return () => unsubscribes.forEach(unsub => unsub());
   }, [user]);
 
-  const [hsCodeResults, setHsCodeResults] = useState<any[]>([]);
+  const [hsCodeResults, setHsCodeResults] = useState<any[]>(() => {
+    const saved = localStorage.getItem('last_hs_code_results');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [recentHSCodeActivity, setRecentHSCodeActivity] = useState<any[]>([]);
-  const [ntnMissingResults, setNtnMissingResults] = useState<any[]>([]);
+  const [ntnMissingResults, setNtnMissingResults] = useState<any[]>(() => {
+    const saved = localStorage.getItem('last_ntn_missing_results');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [recentNtnMissingActivity, setRecentNtnMissingActivity] = useState<any[]>([]);
-  const [ntnAutoUpdateResults, setNtnAutoUpdateResults] = useState<any[]>([]);
+  const [ntnAutoUpdateResults, setNtnAutoUpdateResults] = useState<any[]>(() => {
+    const saved = localStorage.getItem('last_ntn_auto_update_results');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [recentNtnAutoUpdateActivity, setRecentNtnAutoUpdateActivity] = useState<any[]>([]);
-  const [bucketShopResults, setBucketShopResults] = useState<any[]>([]);
+  const [bucketShopResults, setBucketShopResults] = useState<any[]>(() => {
+    const saved = localStorage.getItem('last_bucket_shop_results');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [recentBucketShopActivity, setRecentBucketShopActivity] = useState<any[]>([]);
-  const [differentLinesResults, setDifferentLinesResults] = useState<any[]>([]);
+  const [differentLinesResults, setDifferentLinesResults] = useState<any[]>(() => {
+    const saved = localStorage.getItem('last_different_lines_results');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [recentDifferentLinesActivity, setRecentDifferentLinesActivity] = useState<any[]>([]);
+
+  // Persist tool results to local storage
+  useEffect(() => {
+    localStorage.setItem('last_hs_code_results', JSON.stringify(hsCodeResults));
+  }, [hsCodeResults]);
+
+  useEffect(() => {
+    localStorage.setItem('last_ntn_missing_results', JSON.stringify(ntnMissingResults));
+  }, [ntnMissingResults]);
+
+  useEffect(() => {
+    localStorage.setItem('last_ntn_auto_update_results', JSON.stringify(ntnAutoUpdateResults));
+  }, [ntnAutoUpdateResults]);
+
+  useEffect(() => {
+    localStorage.setItem('last_bucket_shop_results', JSON.stringify(bucketShopResults));
+  }, [bucketShopResults]);
+
+  useEffect(() => {
+    localStorage.setItem('last_different_lines_results', JSON.stringify(differentLinesResults));
+  }, [differentLinesResults]);
 
   const [isScreenLocked, setIsScreenLocked] = useState(false);
   const [lockPin, setLockPin] = useState('1234');
@@ -1724,8 +1761,34 @@ function AppContent() {
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Top Header */}
           <header className="h-20 bg-white border-b border-gray-200 px-8 flex items-center justify-between z-10">
-            <div className="flex flex-1 items-center space-x-8">
-              <h1 className="text-xl font-black text-gray-800 shrink-0 tracking-tight">NTN <span className="text-blue-600">SYSTEM</span></h1>
+            <div className="flex flex-1 items-center space-x-4">
+              <div 
+                onClick={() => setHeaderColorStyle((prev) => (prev + 1) % 6)}
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm cursor-pointer transition-all hover:scale-110 active:scale-95 ${
+                  headerColorStyle === 0 ? 'bg-blue-50 text-blue-600' :
+                  headerColorStyle === 1 ? 'bg-emerald-50 text-emerald-600' :
+                  headerColorStyle === 2 ? 'bg-indigo-50 text-indigo-600' :
+                  headerColorStyle === 3 ? 'bg-rose-50 text-rose-600' :
+                  headerColorStyle === 4 ? 'bg-amber-50 text-amber-600' :
+                  'bg-purple-50 text-purple-600'
+                }`}
+                title="Click to change header color"
+              >
+                <LayoutDashboard size={24} />
+              </div>
+              <h1 
+                onClick={() => setHeaderColorStyle((prev) => (prev + 1) % 6)}
+                className="text-xl font-black text-gray-800 shrink-0 tracking-tight cursor-pointer select-none"
+              >
+                NTN <span className={
+                  headerColorStyle === 0 ? 'text-blue-600' :
+                  headerColorStyle === 1 ? 'text-emerald-600' :
+                  headerColorStyle === 2 ? 'text-indigo-600' :
+                  headerColorStyle === 3 ? 'text-rose-600' :
+                  headerColorStyle === 4 ? 'text-amber-600' :
+                  'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 bg-clip-text text-transparent'
+                }>SYSTEM</span>
+              </h1>
             </div>
             
             <div className="flex items-center space-x-6 ml-8">
@@ -2124,18 +2187,20 @@ function AppContent() {
                 <div className="grid grid-cols-4 gap-6 mb-10">
                   {[
                     { label: 'NTN TOTAL RECORDS', value: ntnRecords.length.toLocaleString(), icon: FileText, color: 'blue', bg: 'bg-blue-50/50', iconBg: 'bg-blue-500' },
-                    { label: 'HS CODE VERIFICATION', value: hsCodeRecords.length.toLocaleString(), icon: BarChart3, color: 'purple', bg: 'bg-purple-50/50', iconBg: 'bg-purple-500' },
-                    { label: 'NTN MISSING', value: ntnMissingRecords.length.toLocaleString(), icon: AlertTriangle, color: 'orange', bg: 'bg-orange-50/50', iconBg: 'bg-orange-500' },
-                    { label: 'BUCKET SHOPS', value: bucketShopRecords.length.toLocaleString(), icon: Store, color: 'teal', bg: 'bg-teal-50/50', iconBg: 'bg-teal-500' },
+                    { label: 'HS CODE RESULTS', value: hsCodeResults.length.toLocaleString(), icon: BarChart3, color: 'purple', bg: 'bg-purple-50/50', iconBg: 'bg-purple-500' },
+                    { label: 'NTN MISSING RESULTS', value: ntnMissingResults.length.toLocaleString(), icon: AlertTriangle, color: 'orange', bg: 'bg-orange-50/50', iconBg: 'bg-orange-500' },
+                    { label: 'BUCKET SHOP RESULTS', value: bucketShopResults.length.toLocaleString(), icon: Store, color: 'teal', bg: 'bg-teal-50/50', iconBg: 'bg-teal-500' },
                   ].map((stat, i) => (
                     <div key={i} className={`${stat.bg} border border-gray-100 p-8 rounded-[32px] flex flex-col items-center text-center transition-all hover:shadow-xl hover:-translate-y-1 group`}>
                       <div className={`w-14 h-14 ${stat.iconBg} rounded-2xl flex items-center justify-center text-white shadow-lg shadow-current/20 mb-6 group-hover:scale-110 transition-transform`}>
                         <stat.icon size={28} />
                       </div>
                       <p className="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-2">{stat.label}</p>
-                      <div className="flex items-baseline space-x-1">
-                        <h3 className="text-4xl font-black tracking-tight text-gray-800">{stat.value}</h3>
-                        <span className="text-[10px] text-gray-400 uppercase font-bold">Results</span>
+                      <div className="flex flex-col items-center">
+                        <div className="flex items-baseline space-x-1">
+                          <h3 className="text-4xl font-black tracking-tight text-gray-800">{stat.value}</h3>
+                          <span className="text-[10px] text-gray-400 uppercase font-bold">Results</span>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -3255,7 +3320,25 @@ function AppContent() {
         )}
 
         {activeTab === 'HS Code' && (
-          <div className="space-y-6">
+          <div className="space-y-8">
+            {/* HS Code Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {[
+                { label: 'TOTAL HS RECORDS', value: hsCodeRecords.length.toLocaleString(), icon: FileCode, color: 'blue', bg: 'bg-blue-50/50', iconBg: 'bg-blue-500' },
+                { label: 'CURRENT RESULTS', value: hsCodeResults.length.toLocaleString(), icon: Search, color: 'purple', bg: 'bg-purple-50/50', iconBg: 'bg-purple-500' },
+                { label: 'VALID CODES', value: hsCodeResults.filter(r => r.isValid).length.toLocaleString(), icon: CheckCircle2, color: 'emerald', bg: 'bg-emerald-50/50', iconBg: 'bg-emerald-500' },
+                { label: 'INVALID CODES', value: hsCodeResults.filter(r => !r.isValid).length.toLocaleString(), icon: XCircle, color: 'red', bg: 'bg-red-50/50', iconBg: 'bg-red-500' },
+              ].map((stat, i) => (
+                <div key={i} className={`${stat.bg} border border-gray-100 p-6 rounded-[32px] flex flex-col items-center text-center transition-all hover:shadow-lg group`}>
+                  <div className={`w-12 h-12 ${stat.iconBg} rounded-2xl flex items-center justify-center text-white shadow-lg shadow-current/20 mb-4 group-hover:scale-110 transition-transform`}>
+                    <stat.icon size={24} />
+                  </div>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                  <p className={`text-2xl font-black text-gray-800 tracking-tight`}>{stat.value}</p>
+                </div>
+              ))}
+            </div>
+
             <div className="bg-white rounded-[40px] p-10 shadow-sm border border-gray-100">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
@@ -3264,13 +3347,22 @@ function AppContent() {
                 </div>
                 <div className="flex items-center space-x-3">
                   {hsCodeResults.length > 0 && (
-                    <button 
-                      onClick={exportHSCodeResults}
-                      className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all flex items-center space-x-2"
-                    >
-                      <Download size={18} />
-                      <span>Export Results</span>
-                    </button>
+                    <div className="flex items-center space-x-3">
+                      <button 
+                        onClick={() => setHsCodeResults([])}
+                        className="px-6 py-3 bg-red-50 text-red-600 rounded-2xl font-bold hover:bg-red-100 transition-all flex items-center space-x-2"
+                      >
+                        <Trash2 size={18} />
+                        <span>Clear</span>
+                      </button>
+                      <button 
+                        onClick={exportHSCodeResults}
+                        className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all flex items-center space-x-2"
+                      >
+                        <Download size={18} />
+                        <span>Export Results</span>
+                      </button>
+                    </div>
                   )}
                   <button 
                     onClick={() => document.getElementById('hs-code-upload')?.click()}
@@ -3362,7 +3454,24 @@ function AppContent() {
         )}
 
         {activeTab === 'NTN Missing' && (
-          <div className="space-y-6">
+          <div className="space-y-8">
+            {/* NTN Missing Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[
+                { label: 'TOTAL MISSING DB', value: ntnMissingRecords.length.toLocaleString(), icon: AlertCircle, color: 'blue', bg: 'bg-blue-50/50', iconBg: 'bg-blue-500' },
+                { label: 'CURRENT RESULTS', value: ntnMissingResults.length.toLocaleString(), icon: Search, color: 'orange', bg: 'bg-orange-50/50', iconBg: 'bg-orange-500' },
+                { label: 'HIGH VALUE SHIPMENTS', value: ntnMissingResults.filter(r => parseFloat(r.customsValue) > 5000).length.toLocaleString(), icon: Zap, color: 'amber', bg: 'bg-amber-50/50', iconBg: 'bg-amber-500' },
+              ].map((stat, i) => (
+                <div key={i} className={`${stat.bg} border border-gray-100 p-6 rounded-[32px] flex flex-col items-center text-center transition-all hover:shadow-lg group`}>
+                  <div className={`w-12 h-12 ${stat.iconBg} rounded-2xl flex items-center justify-center text-white shadow-lg shadow-current/20 mb-4 group-hover:scale-110 transition-transform`}>
+                    <stat.icon size={24} />
+                  </div>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                  <p className={`text-2xl font-black text-gray-800 tracking-tight`}>{stat.value}</p>
+                </div>
+              ))}
+            </div>
+
             <div className="bg-white rounded-[40px] p-10 shadow-sm border border-gray-100">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
@@ -3371,13 +3480,22 @@ function AppContent() {
                 </div>
                 <div className="flex items-center space-x-3">
                   {ntnMissingResults.length > 0 && (
-                    <button 
-                      onClick={exportNtnMissingResults}
-                      className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all flex items-center space-x-2"
-                    >
-                      <Download size={18} />
-                      <span>Export Results</span>
-                    </button>
+                    <div className="flex items-center space-x-3">
+                      <button 
+                        onClick={() => setNtnMissingResults([])}
+                        className="px-6 py-3 bg-red-50 text-red-600 rounded-2xl font-bold hover:bg-red-100 transition-all flex items-center space-x-2"
+                      >
+                        <Trash2 size={18} />
+                        <span>Clear</span>
+                      </button>
+                      <button 
+                        onClick={exportNtnMissingResults}
+                        className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all flex items-center space-x-2"
+                      >
+                        <Download size={18} />
+                        <span>Export Results</span>
+                      </button>
+                    </div>
                   )}
                   <button 
                     onClick={() => document.getElementById('ntn-missing-upload')?.click()}
@@ -3459,7 +3577,25 @@ function AppContent() {
         )}
 
         {activeTab === 'NTN Auto Update' && (
-          <div className="space-y-6">
+          <div className="space-y-8">
+            {/* NTN Auto Update Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {[
+                { label: 'TOTAL NTN RECORDS', value: ntnRecords.length.toLocaleString(), icon: FileText, color: 'blue', bg: 'bg-blue-50/50', iconBg: 'bg-blue-500' },
+                { label: 'CURRENT RESULTS', value: ntnAutoUpdateResults.length.toLocaleString(), icon: Search, color: 'purple', bg: 'bg-purple-50/50', iconBg: 'bg-purple-500' },
+                { label: 'MATCHED (FILLED)', value: ntnAutoUpdateResults.filter(r => r.status === 'Filled').length.toLocaleString(), icon: CheckCircle2, color: 'emerald', bg: 'bg-emerald-50/50', iconBg: 'bg-emerald-500' },
+                { label: 'NOT FOUND', value: ntnAutoUpdateResults.filter(r => r.status === 'Not Found').length.toLocaleString(), icon: XCircle, color: 'red', bg: 'bg-red-50/50', iconBg: 'bg-red-500' },
+              ].map((stat, i) => (
+                <div key={i} className={`${stat.bg} border border-gray-100 p-6 rounded-[32px] flex flex-col items-center text-center transition-all hover:shadow-lg group`}>
+                  <div className={`w-12 h-12 ${stat.iconBg} rounded-2xl flex items-center justify-center text-white shadow-lg shadow-current/20 mb-4 group-hover:scale-110 transition-transform`}>
+                    <stat.icon size={24} />
+                  </div>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                  <p className={`text-2xl font-black text-gray-800 tracking-tight`}>{stat.value}</p>
+                </div>
+              ))}
+            </div>
+
             <div className="bg-white rounded-[40px] p-10 shadow-sm border border-gray-100">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
@@ -3468,13 +3604,22 @@ function AppContent() {
                 </div>
                 <div className="flex items-center space-x-3">
                   {ntnAutoUpdateResults.length > 0 && (
-                    <button 
-                      onClick={exportNtnAutoUpdateResults}
-                      className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all flex items-center space-x-2"
-                    >
-                      <Download size={18} />
-                      <span>Export Results</span>
-                    </button>
+                    <div className="flex items-center space-x-3">
+                      <button 
+                        onClick={() => setNtnAutoUpdateResults([])}
+                        className="px-6 py-3 bg-red-50 text-red-600 rounded-2xl font-bold hover:bg-red-100 transition-all flex items-center space-x-2"
+                      >
+                        <Trash2 size={18} />
+                        <span>Clear</span>
+                      </button>
+                      <button 
+                        onClick={exportNtnAutoUpdateResults}
+                        className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all flex items-center space-x-2"
+                      >
+                        <Download size={18} />
+                        <span>Export Results</span>
+                      </button>
+                    </div>
                   )}
                   <button 
                     onClick={() => document.getElementById('ntn-auto-upload')?.click()}
@@ -3565,7 +3710,24 @@ function AppContent() {
         )}
 
         {activeTab === 'Bucket Shop' && (
-          <div className="space-y-6">
+          <div className="space-y-8">
+            {/* Bucket Shop Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[
+                { label: 'TOTAL BUCKET DB', value: bucketShopRecords.length.toLocaleString(), icon: Store, color: 'blue', bg: 'bg-blue-50/50', iconBg: 'bg-blue-500' },
+                { label: 'CURRENT RESULTS', value: bucketShopResults.length.toLocaleString(), icon: Search, color: 'teal', bg: 'bg-teal-50/50', iconBg: 'bg-teal-500' },
+                { label: 'SIALKOT MATCHES', value: bucketShopResults.length.toLocaleString(), icon: Truck, color: 'indigo', bg: 'bg-indigo-50/50', iconBg: 'bg-indigo-500' },
+              ].map((stat, i) => (
+                <div key={i} className={`${stat.bg} border border-gray-100 p-6 rounded-[32px] flex flex-col items-center text-center transition-all hover:shadow-lg group`}>
+                  <div className={`w-12 h-12 ${stat.iconBg} rounded-2xl flex items-center justify-center text-white shadow-lg shadow-current/20 mb-4 group-hover:scale-110 transition-transform`}>
+                    <stat.icon size={24} />
+                  </div>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                  <p className={`text-2xl font-black text-gray-800 tracking-tight`}>{stat.value}</p>
+                </div>
+              ))}
+            </div>
+
             <div className="bg-white rounded-[40px] p-10 shadow-sm border border-gray-100">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
@@ -3574,13 +3736,22 @@ function AppContent() {
                 </div>
                 <div className="flex items-center space-x-3">
                   {bucketShopResults.length > 0 && (
-                    <button 
-                      onClick={exportBucketShopResults}
-                      className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all flex items-center space-x-2"
-                    >
-                      <Download size={18} />
-                      <span>Export Results</span>
-                    </button>
+                    <div className="flex items-center space-x-3">
+                      <button 
+                        onClick={() => setBucketShopResults([])}
+                        className="px-6 py-3 bg-red-50 text-red-600 rounded-2xl font-bold hover:bg-red-100 transition-all flex items-center space-x-2"
+                      >
+                        <Trash2 size={18} />
+                        <span>Clear</span>
+                      </button>
+                      <button 
+                        onClick={exportBucketShopResults}
+                        className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all flex items-center space-x-2"
+                      >
+                        <Download size={18} />
+                        <span>Export Results</span>
+                      </button>
+                    </div>
                   )}
                   <button 
                     onClick={() => document.getElementById('bucket-shop-upload')?.click()}
@@ -3662,7 +3833,25 @@ function AppContent() {
         )}
 
         {activeTab === 'Different Lines' && (
-          <div className="space-y-6">
+          <div className="space-y-8">
+            {/* Different Lines Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {[
+                { label: 'TOTAL NTN RECORDS', value: ntnRecords.length.toLocaleString(), icon: FileText, color: 'blue', bg: 'bg-blue-50/50', iconBg: 'bg-blue-500' },
+                { label: 'CURRENT RESULTS', value: differentLinesResults.length.toLocaleString(), icon: Search, color: 'purple', bg: 'bg-purple-50/50', iconBg: 'bg-purple-500' },
+                { label: 'EXTRACTED NTN', value: differentLinesResults.filter(r => r.status === 'Filled').length.toLocaleString(), icon: CheckCircle2, color: 'blue', bg: 'bg-blue-50/50', iconBg: 'bg-blue-500' },
+                { label: 'NO NTN FOUND', value: differentLinesResults.filter(r => r.status === 'Not Found').length.toLocaleString(), icon: XCircle, color: 'gray', bg: 'bg-gray-50/50', iconBg: 'bg-gray-400' },
+              ].map((stat, i) => (
+                <div key={i} className={`${stat.bg} border border-gray-100 p-6 rounded-[32px] flex flex-col items-center text-center transition-all hover:shadow-lg group`}>
+                  <div className={`w-12 h-12 ${stat.iconBg} rounded-2xl flex items-center justify-center text-white shadow-lg shadow-current/20 mb-4 group-hover:scale-110 transition-transform`}>
+                    <stat.icon size={24} />
+                  </div>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                  <p className={`text-2xl font-black text-gray-800 tracking-tight`}>{stat.value}</p>
+                </div>
+              ))}
+            </div>
+
             <div className="bg-white rounded-[40px] p-10 shadow-sm border border-gray-100">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
@@ -3671,13 +3860,22 @@ function AppContent() {
                 </div>
                 <div className="flex items-center space-x-3">
                   {differentLinesResults.length > 0 && (
-                    <button 
-                      onClick={exportDifferentLinesResults}
-                      className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all flex items-center space-x-2"
-                    >
-                      <Download size={18} />
-                      <span>Export Results</span>
-                    </button>
+                    <div className="flex items-center space-x-3">
+                      <button 
+                        onClick={() => setDifferentLinesResults([])}
+                        className="px-6 py-3 bg-red-50 text-red-600 rounded-2xl font-bold hover:bg-red-100 transition-all flex items-center space-x-2"
+                      >
+                        <Trash2 size={18} />
+                        <span>Clear</span>
+                      </button>
+                      <button 
+                        onClick={exportDifferentLinesResults}
+                        className="px-6 py-3 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all flex items-center space-x-2"
+                      >
+                        <Download size={18} />
+                        <span>Export Results</span>
+                      </button>
+                    </div>
                   )}
                   <button 
                     onClick={() => document.getElementById('different-lines-upload')?.click()}
@@ -4392,10 +4590,15 @@ function AppContent() {
         </motion.div>
 
         {/* Footer */}
-        <div className="absolute bottom-8 text-center w-full left-0">
-          <p className="text-[10px] text-gray-400 uppercase tracking-widest">
+        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 text-center">
+          <motion.p 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="text-[10px] text-blue-400/80 font-bold uppercase tracking-[0.2em] whitespace-nowrap"
+          >
             © 2025 NTN Management System • Created by Imran Ahmed
-          </p>
+          </motion.p>
         </div>
       </div>
     </div>
