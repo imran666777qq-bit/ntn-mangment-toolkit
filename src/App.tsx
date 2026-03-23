@@ -261,6 +261,11 @@ function AppContent() {
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
+    if ((activeTab === 'NTN Search' || activeTab === 'Dashboard') && searchQuery) {
+      setTimeout(() => {
+        setSearchQuery('');
+      }, 500);
+    }
     setTimeout(() => setCopiedId(null), 2000);
   };
   const [showLogoutDropdown, setShowLogoutDropdown] = useState(false);
@@ -1570,38 +1575,38 @@ function AppContent() {
               >
                 {logoStyle === 0 && (
                   <>
-                    <span className="font-black text-[14px] uppercase tracking-tighter text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]">NTN SYSTEM</span>
+                    <span className="font-black text-[12px] uppercase tracking-tighter text-blue-400 drop-shadow-[0_0_8px_rgba(96,165,250,0.5)]">NTN SYSTEM</span>
                     <span className="text-white opacity-40 text-[8px] font-bold uppercase tracking-[0.2em] -mt-1">MANAGEMENT PRO</span>
                   </>
                 )}
                 {logoStyle === 1 && (
                   <>
-                    <span className="font-black text-[14px] uppercase tracking-tight text-white">NTN<span className="text-blue-500">.</span>SYSTEM</span>
+                    <span className="font-black text-[12px] uppercase tracking-tight text-white">NTN.SYSTEM</span>
                     <div className="h-[1px] w-full bg-blue-500/30 mt-0.5"></div>
                     <span className="text-gray-500 text-[7px] font-black uppercase tracking-widest mt-0.5">FEDEX AUTHORIZED</span>
                   </>
                 )}
                 {logoStyle === 2 && (
                   <>
-                    <span className="font-black text-[14px] uppercase tracking-tighter bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">NTN SYSTEM</span>
+                    <span className="font-black text-[12px] uppercase tracking-tighter bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-400 bg-clip-text text-transparent">NTN SYSTEM</span>
                     <span className="text-white/30 text-[8px] font-medium italic -mt-0.5">Digital Logistics</span>
                   </>
                 )}
                 {logoStyle === 3 && (
                   <div className="bg-white/10 backdrop-blur-md border border-white/20 px-2 py-0.5 rounded-lg flex flex-col items-center">
-                    <span className="font-black text-[11px] uppercase tracking-[0.1em] text-white">NTN SYSTEM</span>
+                    <span className="font-black text-[10px] uppercase tracking-[0.1em] text-white">NTN SYSTEM</span>
                     <span className="text-[6px] font-bold text-blue-400 uppercase tracking-widest">SECURE PORTAL</span>
                   </div>
                 )}
                 {logoStyle === 4 && (
                   <>
-                    <span className="font-mono text-[12px] font-bold tracking-[0.2em] text-blue-400">NTN_SYS</span>
+                    <span className="font-mono text-[11px] font-bold tracking-[0.1em] text-blue-400">NTN_SYS</span>
                     <span className="font-mono text-[8px] text-white/40 tracking-tighter -mt-1">v2.5.0-STABLE</span>
                   </>
                 )}
                 {logoStyle === 5 && (
                   <div className="border-l-2 border-blue-500 pl-2">
-                    <span className="font-black text-[15px] uppercase leading-none text-white block">NTN</span>
+                    <span className="font-black text-[12px] uppercase leading-none text-white block">NTN</span>
                     <span className="font-bold text-[10px] uppercase leading-none text-blue-500 block tracking-widest">SYSTEM</span>
                   </div>
                 )}
@@ -2083,8 +2088,17 @@ function AppContent() {
                         placeholder="Search NTN, CNIC or Company Name..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-14 pr-6 py-4 bg-gray-50 border border-transparent rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:bg-white focus:border-blue-500 transition-all text-lg font-bold text-gray-800 placeholder:text-gray-300"
+                        className="w-full pl-14 pr-12 py-4 bg-gray-50 border border-transparent rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:bg-white focus:border-blue-500 transition-all text-lg font-bold text-gray-800 placeholder:text-gray-300"
                       />
+                      {searchQuery && (
+                        <button
+                          onClick={() => setSearchQuery('')}
+                          className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors z-10"
+                          title="Clear search"
+                        >
+                          <X size={20} />
+                        </button>
+                      )}
                     </div>
                     <button 
                       onClick={() => searchQuery.length > 0 ? null : setActiveTab('NTN Search')}
@@ -2758,8 +2772,17 @@ function AppContent() {
                   placeholder="Search by NTN, CNIC, or Company Name..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm font-bold text-gray-800"
+                  className="w-full pl-12 pr-12 py-3 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm font-bold text-gray-800"
                 />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className={`absolute ${isSearching ? 'right-10' : 'right-4'} top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors z-10`}
+                    title="Clear search"
+                  >
+                    <X size={18} />
+                  </button>
+                )}
                 {isSearching && (
                   <div className="absolute right-4 top-1/2 -translate-y-1/2">
                     <div className="w-4 h-4 border-2 border-blue-100 border-t-blue-600 rounded-full animate-spin" />
