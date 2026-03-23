@@ -18,7 +18,7 @@ import {
   Store, Layers, Bell, ChevronDown, FileText, BarChart3, AlertTriangle,
   PieChart, Database, Hash, FileWarning, Zap, ShoppingBag, GitBranch, UserCircle, Sliders,
   Copy, Check, Edit2, Trash2, XCircle, Plus, X, ShieldCheck, Info, Upload, Download,
-  Shield, Key, Save, Mail
+  Shield, Key, Save, Mail, LayoutGrid
 } from 'lucide-react';
 
 // Mock User for local development
@@ -32,6 +32,27 @@ const mockUser = {
 };
 
 import emailjs from 'emailjs-com';
+
+// --- Custom Search Icon (Grid) ---
+const CustomSearchIcon = ({ size = 20, className = "" }: { size?: number, className?: string }) => (
+  <div className={`flex items-center justify-center rounded-xl bg-[#f0fdf4] p-1.5 border border-[#dcfce7] ${className}`}>
+    <svg 
+      width={size} 
+      height={size} 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="#059669" 
+      strokeWidth="2.5" 
+      strokeLinecap="round" 
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="3" width="7" height="7" rx="1" />
+      <rect x="14" y="14" width="7" height="7" rx="1" />
+      <rect x="3" y="14" width="7" height="7" rx="1" />
+    </svg>
+  </div>
+);
 
 // --- Error Boundary ---
 interface ErrorBoundaryProps {
@@ -2082,13 +2103,13 @@ function AppContent() {
                 <div className="mb-10">
                   <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100 flex items-center space-x-4">
                     <div className="flex-1 relative group">
-                      <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" size={20} />
+                      <CustomSearchIcon className="absolute left-3 top-1/2 -translate-y-1/2" size={18} />
                       <input 
                         type="text" 
                         placeholder="Search NTN, CNIC or Company Name..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-14 pr-12 py-4 bg-gray-50 border border-transparent rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:bg-white focus:border-blue-500 transition-all text-lg font-bold text-gray-800 placeholder:text-gray-300"
+                        className="w-full pl-16 pr-12 py-4 bg-gray-50 border border-transparent rounded-2xl focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:bg-white focus:border-blue-500 transition-all text-lg font-bold text-gray-800 placeholder:text-gray-300"
                       />
                       {searchQuery && (
                         <button
@@ -2188,7 +2209,7 @@ function AppContent() {
                         ))
                       ) : (
                         <div className="col-span-2 py-16 text-center bg-white rounded-[40px] border border-dashed border-gray-200">
-                          <Search size={48} className="mx-auto text-gray-200 mb-4" />
+                          <LayoutGrid size={48} className="mx-auto text-gray-200 mb-4" />
                           <p className="text-lg font-bold text-gray-400">No records found for "{searchQuery}"</p>
                           <p className="text-xs text-gray-300 uppercase tracking-widest mt-1">Try searching with a different keyword</p>
                         </div>
@@ -2329,7 +2350,7 @@ function AppContent() {
                       <tr>
                         <td colSpan={5} className="py-10 text-center">
                           <div className="flex flex-col items-center justify-center text-gray-400">
-                            <Search size={24} className="mb-2 opacity-20" />
+                            <LayoutGrid size={24} className="mb-2 opacity-20" />
                             <p className="text-xs font-medium">No records found matching your search</p>
                           </div>
                         </td>
@@ -2414,8 +2435,7 @@ function AppContent() {
                       <tr>
                         <td colSpan={4} className="py-10 text-center">
                           <div className="flex flex-col items-center justify-center text-gray-400">
-                            <Search size={24} className="mb-2 opacity-20" />
-                            <p className="text-xs font-medium">No recent HS Code activity. Upload a file in the HS Code tab.</p>
+                            <LayoutGrid size={24} className="mb-2 opacity-20" />
                           </div>
                         </td>
                       </tr>
@@ -2495,7 +2515,7 @@ function AppContent() {
                       <tr>
                         <td colSpan={4} className="py-10 text-center">
                           <div className="flex flex-col items-center justify-center text-gray-400">
-                            <Search size={24} className="mb-2 opacity-20" />
+                            <LayoutGrid size={24} className="mb-2 opacity-20" />
                             <p className="text-xs font-medium">No recent NTN Missing activity. Upload a file in the NTN Missing tab.</p>
                           </div>
                         </td>
@@ -2584,7 +2604,7 @@ function AppContent() {
                       <tr>
                         <td colSpan={4} className="py-10 text-center">
                           <div className="flex flex-col items-center justify-center text-gray-400">
-                            <Search size={24} className="mb-2 opacity-20" />
+                            <LayoutGrid size={24} className="mb-2 opacity-20" />
                             <p className="text-xs font-medium">No records found matching your search</p>
                           </div>
                         </td>
@@ -2664,7 +2684,7 @@ function AppContent() {
                       <tr>
                         <td colSpan={4} className="py-10 text-center">
                           <div className="flex flex-col items-center justify-center text-gray-400">
-                            <Search size={24} className="mb-2 opacity-20" />
+                            <LayoutGrid size={24} className="mb-2 opacity-20" />
                             <p className="text-xs font-medium">No recent Bucket Shop activity. Upload a file in the Bucket Shop tab.</p>
                           </div>
                         </td>
@@ -2748,7 +2768,7 @@ function AppContent() {
                       <tr>
                         <td colSpan={5} className="py-10 text-center">
                           <div className="flex flex-col items-center justify-center text-gray-400">
-                            <Search size={24} className="mb-2 opacity-20" />
+                            <LayoutGrid size={24} className="mb-2 opacity-20" />
                             <p className="text-xs font-medium">No recent Different Lines activity. Upload a file in the Different Lines tab.</p>
                           </div>
                         </td>
@@ -2766,13 +2786,13 @@ function AppContent() {
             {/* Search Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
               <div className="flex-1 relative max-w-2xl">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <CustomSearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2" size={14} />
                 <input 
                   type="text" 
                   placeholder="Search by NTN, CNIC, or Company Name..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-12 py-3 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm font-bold text-gray-800"
+                  className="w-full pl-14 pr-12 py-3 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm font-bold text-gray-800"
                 />
                 {searchQuery && (
                   <button
@@ -2796,7 +2816,7 @@ function AppContent() {
                   disabled={isSearching}
                   className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center space-x-2 disabled:opacity-50"
                 >
-                  <Search size={18} />
+                  <LayoutGrid size={18} />
                   <span>Search</span>
                 </button>
                 <div className="relative group">
@@ -2930,7 +2950,7 @@ function AppContent() {
                     ) : (
                       <div className="bg-white p-12 rounded-[40px] border border-dashed border-gray-200 text-center">
                         <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center text-gray-300 mx-auto mb-4">
-                          <Search size={32} />
+                          <LayoutGrid size={32} />
                         </div>
                         <p className="text-gray-400 font-bold">No records found for "{searchQuery}"</p>
                         <p className="text-[10px] text-gray-300 uppercase tracking-widest mt-1">Try searching with a different keyword</p>
