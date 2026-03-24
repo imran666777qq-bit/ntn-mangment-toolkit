@@ -18,7 +18,7 @@ import {
   Store, Layers, Bell, ChevronDown, FileText, BarChart3, AlertTriangle,
   PieChart, Database, Hash, FileWarning, Zap, ShoppingBag, GitBranch, UserCircle, Sliders,
   Copy, Check, Edit2, Trash2, XCircle, Plus, X, ShieldCheck, Info, Upload, Download,
-  Shield, Key, Save, Mail, LayoutGrid
+  Shield, Key, Save, Mail, LayoutGrid, List
 } from 'lucide-react';
 
 // Mock User for local development
@@ -95,6 +95,41 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
     return this.props.children;
   }
 }
+
+// Enhanced NTN pattern to include alphanumeric NTNs like A123457, B123456, D123457 and handle optional hyphens
+// Added support for NTN.NO, NTN.N0, etc.
+// Stricter digit matching to avoid picking up random text
+const NTN_REGEX = /\b(NTN(?:\.NO|\.N0|\s*NO|\s*N0|\s*[:#.]?)\s*[A-Z]?\d{6,8}(?:-\d)?)\b|\b(\d{5}-\d{7}-\d)\b|\b(\d{13})\b|\b(\d{7,8}-\d)\b|\b(\d{7,8})\b|\b([A-Z]\d{6,8})\b|\b([A-Z]-\d{6,8})\b/i;
+
+const cleanNtnValue = (ntn: string) => {
+  if (!ntn) return '';
+  // Clean up extra words like (MID:...)
+  let cleaned = ntn.split('(')[0].trim();
+  // Remove NTN prefixes, dots, etc.
+  cleaned = cleaned.replace(/NTN(?:\.NO|\.N0|\s*NO|\s*N0|\s*[:#.]?)/gi, '').trim();
+  // Remove anything that's not alphanumeric or hyphen
+  cleaned = cleaned.replace(/[^A-Z0-9-]/gi, '').toUpperCase();
+  
+  // If it's a CNIC (13 digits), format it
+  if (/^\d{13}$/.test(cleaned)) {
+    cleaned = cleaned.slice(0, 5) + '-' + cleaned.slice(5, 12) + '-' + cleaned.slice(12);
+  }
+  // Ensure it's in standard format if it's 8 digits
+  else if (/^\d{8}$/.test(cleaned)) {
+    cleaned = cleaned.slice(0, 7) + '-' + cleaned.slice(7);
+  }
+  
+  // Return only the cleaned value if it looks like a number/NTN
+  return cleaned.length >= 7 ? `NTN ${cleaned}` : '';
+};
+
+const getRawNtn = (ntn: string) => {
+  if (!ntn) return '';
+  // Remove NTN prefixes, dots, etc.
+  let cleaned = ntn.replace(/NTN(?:\.NO|\.N0|\s*NO|\s*N0|\s*[:#.]?)/gi, '').trim();
+  // Remove anything that's not alphanumeric
+  return cleaned.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+};
 
 // --- Main App Component ---
 function AppContent() {
@@ -372,6 +407,11 @@ function AppContent() {
     setSuccessMessage('Profile updated successfully!');
     setTimeout(() => setSuccessMessage(''), 3000);
   };
+  const [isNtnRecordsModalOpen, setIsNtnRecordsModalOpen] = useState(false);
+  const [selectedNtnRecords, setSelectedNtnRecords] = useState<string[]>([]);
+  const [ntnRecordsSearchQuery, setNtnRecordsSearchQuery] = useState('');
+  const [showDuplicatesOnly, setShowDuplicatesOnly] = useState(false);
+  const [isDeletingBulk, setIsDeletingBulk] = useState(false);
   const [ntnRecords, setNtnRecords] = useState<any[]>([]);
   const [hsCodeRecords, setHsCodeRecords] = useState<any[]>([]);
   const [ntnMissingRecords, setNtnMissingRecords] = useState<any[]>([]);
@@ -507,9 +547,30 @@ function AppContent() {
 
     const results = filteredData.map((row, index) => {
       const tracking = row['Tracking Number'] || row['tracking'] || '';
-      const shipper = row['Shipper Company'] || row['shipper'] || '';
+      let shipper = (row['Shipper Company'] || row['shipper'] || '').toString().trim();
       const hsCodeRaw = row['Commodity Harmonized Code'] || row['hs'] || '';
+      const desc = (row['CE Commodity Description'] || row['Description'] || '').toString().trim();
+      const addr1 = (row['Shipper Address line 1'] || row['address1'] || '').toString().trim();
       
+      // Extract NTN if present in shipper, description or address
+      let foundNtn = null;
+      [shipper, desc, addr1].forEach(text => {
+        if (!foundNtn) {
+          const match = text.match(NTN_REGEX);
+          if (match) {
+            foundNtn = cleanNtnValue(match[0]);
+          }
+        }
+      });
+
+      if (foundNtn) {
+        const rawFound = getRawNtn(foundNtn);
+        const finalRaw = getRawNtn(shipper);
+        if (rawFound && !finalRaw.includes(rawFound)) {
+          shipper = `${shipper} ${foundNtn}`;
+        }
+      }
+
       // Extract only digits from HS Code
       const hsCodeDigits = hsCodeRaw.toString().replace(/\D/g, '');
       const isValid = hsCodeDigits.length >= 10;
@@ -541,24 +602,25 @@ function AppContent() {
   };
 
   const processNtnMissingFile = (data: any[]) => {
-    const ntnPattern = /\d{7}-\d/;
-    const cnicPattern = /\d{5}-\d{7}-\d/;
+    const cnicPattern = /\b\d{5}-\d{7}-\d\b|\b\d{13}\b/;
     const invalidSuffixes = [/-eform$/i, /-a$/i, /-e form$/i, /-E FORM$/i];
 
     const filteredData = data.filter(row => {
-      const desc = row['CE Commodity Description'] || row['Description'] || '';
+      const desc = (row['CE Commodity Description'] || row['Description'] || '').toString().trim();
       const company = (row['Shipper Company'] || row['shipper'] || '').toString().trim();
+      const name = (row['Shipper Name'] || row['name'] || '').toString().trim();
+      const taxId = (row['Shpr Tax ID Number'] || row['tax_id'] || row['NTN'] || '').toString().trim();
       const customsValueRaw = row['Customs Value'] || row['value'] || 0;
       const customsValue = parseFloat(customsValueRaw.toString().replace(/[^0-9.]/g, '')) || 0;
 
       // 1. Description must not be blank
-      if (desc.toString().trim() === '') return false;
+      if (desc === '') return false;
 
       // 2. Customs Value must be < 500
       if (customsValue >= 500) return false;
 
-      // 3. Company must not contain NTN or CNIC
-      if (ntnPattern.test(company) || cnicPattern.test(company)) return false;
+      // 3. Company, Name or Tax ID must not contain NTN or CNIC
+      if (NTN_REGEX.test(company) || cnicPattern.test(company) || NTN_REGEX.test(name) || cnicPattern.test(name) || NTN_REGEX.test(taxId) || cnicPattern.test(taxId)) return false;
 
       // 4. Company must not end with specific suffixes
       const hasInvalidSuffix = invalidSuffixes.some(regex => regex.test(company));
@@ -601,19 +663,56 @@ function AppContent() {
       let updatedShipper = shipperCompany;
       let status = 'Not Found';
       let color = 'red';
+      let foundNtn = '';
       
       if (match) {
-        const ntnOrCnic = match.ntn || match.cnic || '';
-        updatedShipper = `${shipperCompany} ${ntnOrCnic}`;
+        foundNtn = match.ntn || match.cnic || '';
+        if (foundNtn && !foundNtn.toUpperCase().startsWith('NTN')) {
+          foundNtn = `NTN ${foundNtn}`;
+        }
+        
+        const rawFound = getRawNtn(foundNtn);
+        const finalRaw = getRawNtn(shipperCompany);
+        if (rawFound && !finalRaw.includes(rawFound)) {
+          updatedShipper = `${shipperCompany} ${foundNtn}`;
+        } else {
+          updatedShipper = shipperCompany;
+        }
+        
         status = 'Filled';
         color = 'emerald';
+      } else {
+        // Try to extract from address if not found in DB
+        const addr1 = (row['Shipper Address line 1'] || row['address1'] || '').toString().trim();
+        const addrAddl = (row['Shpr Addl Addr'] || row['address2'] || '').toString().trim();
+        const taxId = (row['Shpr Tax ID Number'] || row['tax_id'] || row['NTN'] || '').toString().trim();
+        
+        [shipperCompany, shipperName, addr1, addrAddl, taxId].forEach(text => {
+          if (!foundNtn) {
+            const match = text.match(NTN_REGEX);
+            if (match) {
+              foundNtn = cleanNtnValue(match[0]);
+              
+              const rawFound = getRawNtn(foundNtn);
+              const finalRaw = getRawNtn(shipperCompany);
+              if (rawFound && !finalRaw.includes(rawFound)) {
+                updatedShipper = `${shipperCompany} ${foundNtn}`;
+              } else {
+                updatedShipper = shipperCompany;
+              }
+              
+              status = 'Filled';
+              color = 'emerald';
+            }
+          }
+        });
       }
       
       return {
         id: index.toString(),
         tracking,
         shipper: updatedShipper,
-        ntn: match ? (match.ntn || match.cnic || '') : '',
+        ntn: foundNtn,
         originalShipper: shipperCompany,
         name: shipperName,
         status,
@@ -635,10 +734,8 @@ function AppContent() {
   };
 
   const processBucketShopFile = (data: any[]) => {
-    // Robust pattern for NTN: NTN:1234567, 1234567-8, 1234567890123, A1234567, etc.
-    const ntnPattern = /(NTN\s*[:#.]?\s*[A-Z]?\d+[-\d]*)|(\d{5}-\d{7}-\d)|(\d{6,8}-\d)|(\d{7,13})|([A-Z]\d{6,8})|([A-Z]-\d{6,8})/i;
-    const cnicPattern = /\d{5}-\d{7}-\d/;
-    const invalidSuffixes = [/-eform$/i, /-eform$/i, /-a$/i, /-c$/i, /-e form$/i, /-E FORM$/i];
+    const cnicPattern = /\b\d{5}-\d{7}-\d\b|\b\d{13}\b/;
+    const invalidSuffixes = [/\s*-\s*e\s*form/i, /\s*-\s*eform/i, /\s*-\s*a$/i, /\s*-\s*c$/i];
     const sialkotKeywords = ['SIALKOT', 'SIALKOT/PNS', 'PARISROADSILAKOT', 'SKT', 'SKTA'];
     const invalidRefs = ['9999', '9099'];
 
@@ -646,6 +743,7 @@ function AppContent() {
       const desc = (row['CE Commodity Description'] || row['Description'] || '').toString().trim();
       const company = (row['Shipper Company'] || row['shipper'] || '').toString().trim();
       const name = (row['Shipper Name'] || row['name'] || '').toString().trim();
+      const taxId = (row['Shpr Tax ID Number'] || row['tax_id'] || row['NTN'] || '').toString().trim();
       const customsValueRaw = row['Customs Value'] || row['value'] || 0;
       const customsValue = parseFloat(customsValueRaw.toString().replace(/[^0-9.]/g, '')) || 0;
       const city = (row['Shpr City'] || row['city'] || '').toString().trim().toUpperCase();
@@ -657,10 +755,21 @@ function AppContent() {
       // 2. Customs Value must be < 500
       if (customsValue >= 500) return false;
 
-      // 3. Company or Name must not contain NTN or CNIC or 7+ digits or alphanumeric NTN
-      if (ntnPattern.test(company) || cnicPattern.test(company) || ntnPattern.test(name) || cnicPattern.test(name)) return false;
+      // 3. Company, Name or Tax ID must not contain NTN or CNIC or 7+ digits or alphanumeric NTN
+      const hasNtnOrCnic = (text: string) => {
+        if (!text) return false;
+        const lowerText = text.toLowerCase();
+        // Check for keywords, 7+ digits anywhere, or the standard NTN regex
+        return lowerText.includes('ntn') || 
+               lowerText.includes('cnic') || 
+               /\d{7,}/.test(text.replace(/[-\s]/g, '')) || 
+               NTN_REGEX.test(text) || 
+               cnicPattern.test(text);
+      };
 
-      // 4. Company must not end with specific suffixes
+      if (hasNtnOrCnic(company) || hasNtnOrCnic(name) || hasNtnOrCnic(taxId)) return false;
+
+      // 4. Company must not end with specific suffixes (or contain e-form)
       const hasInvalidSuffix = invalidSuffixes.some(regex => regex.test(company));
       if (hasInvalidSuffix) return false;
 
@@ -691,9 +800,6 @@ function AppContent() {
   };
 
   const processDifferentLinesFile = (data: any[]) => {
-    // Enhanced NTN pattern to include alphanumeric NTNs like A123457, B123456, D123457 and handle optional hyphens
-    const ntnRegex = /(NTN\s*[:#.]?\s*[A-Z]?\d+[-\d]*)|(\d{5}-\d{7}-\d)|(\d{6,8}-\d)|(\d{7,13})|([A-Z]\d{6,8}(-\d)?)|([A-Z]-\d{6,8}(-\d)?)/i;
-
     const filteredData = data.filter(row => {
       const desc = row['CE Commodity Description'] || row['Description'] || '';
       return desc.toString().trim() !== '';
@@ -704,37 +810,34 @@ function AppContent() {
       const name = (row['Shipper Name'] || row['name'] || '').toString().trim();
       const addr1 = (row['Shipper Address line 1'] || row['address1'] || '').toString().trim();
       const addrAddl = (row['Shpr Addl Addr'] || row['address2'] || '').toString().trim();
+      const taxId = (row['Shpr Tax ID Number'] || row['tax_id'] || row['NTN'] || '').toString().trim();
 
       // Find NTN in any of the fields
       let foundNtn = null;
-      [company, name, addr1, addrAddl].forEach(text => {
+      [company, name, addr1, addrAddl, taxId].forEach(text => {
         if (!foundNtn) {
-          const match = text.match(ntnRegex);
+          const match = text.match(NTN_REGEX);
           if (match) {
-            // Clean up extra words like (MID:...)
-            foundNtn = match[0].split('(')[0].trim();
+            foundNtn = cleanNtnValue(match[0]);
           }
         }
       });
 
-      let finalCompany = company;
+      // Check if company is just an NTN
+      const companyMatch = company.match(NTN_REGEX);
+      const isCompanyNtnOnly = !!(companyMatch && companyMatch[0].trim() === company.trim());
 
-      // If company is blank, use name
-      if (!finalCompany) {
+      let finalCompany = company;
+      if (!finalCompany || isCompanyNtnOnly) {
         finalCompany = name;
       }
 
-      // If company name IS the NTN (or very short and contains NTN), use name + company
-      const isCompanyNtnOnly = company.match(ntnRegex) && company.length < 25;
-
-      if (isCompanyNtnOnly) {
-        // If company is just NTN, put name before it
-        if (!finalCompany.toLowerCase().includes(name.toLowerCase())) {
-          finalCompany = name + " " + company;
+      if (foundNtn) {
+        const rawFound = getRawNtn(foundNtn);
+        const finalRaw = getRawNtn(finalCompany);
+        if (rawFound && !finalRaw.includes(rawFound)) {
+          finalCompany = finalCompany + " " + foundNtn;
         }
-      } else if (foundNtn && !finalCompany.toLowerCase().includes(foundNtn.toLowerCase())) {
-        // If we found an NTN elsewhere (like in address) and it's not in the company name, append it
-        finalCompany = finalCompany + " " + foundNtn;
       }
 
       return {
@@ -1131,6 +1234,33 @@ function AppContent() {
     } catch (err) {
       console.error('Error deleting record:', err);
       setError('Failed to delete record from database.');
+    }
+  };
+
+  const confirmDeleteSelectedNtnRecords = async () => {
+    if (!user || selectedNtnRecords.length === 0 || isDeletingBulk) return;
+    
+    const count = selectedNtnRecords.length;
+    setIsDeletingBulk(true);
+    setSuccessMessage(`Deleting ${count} records...`);
+    
+    try {
+      console.log(`Attempting to delete ${count} records:`, selectedNtnRecords);
+      const deletePromises = selectedNtnRecords.map(id => {
+        const docRef = doc(db, 'ntn_records', id);
+        return deleteDoc(docRef);
+      });
+      
+      await Promise.all(deletePromises);
+      console.log('Bulk delete successful');
+      setSuccessMessage(`${count} records deleted successfully`);
+      setSelectedNtnRecords([]);
+      setTimeout(() => setSuccessMessage(''), 3000);
+    } catch (err) {
+      console.error('Error deleting records:', err);
+      setError('Failed to delete some records from database.');
+    } finally {
+      setIsDeletingBulk(false);
     }
   };
 
@@ -2819,6 +2949,13 @@ function AppContent() {
                   <LayoutGrid size={18} />
                   <span>Search</span>
                 </button>
+                <button 
+                  onClick={() => setIsNtnRecordsModalOpen(true)}
+                  className="p-3 bg-white border border-gray-200 text-gray-600 rounded-xl hover:bg-gray-50 transition-all shadow-sm flex items-center space-x-2 font-bold"
+                >
+                  <List size={18} />
+                  <span className="hidden sm:inline">Companies List</span>
+                </button>
                 <div className="relative group">
                   <button 
                     onClick={() => document.getElementById('file-upload')?.click()}
@@ -3877,24 +4014,6 @@ function AppContent() {
 
         {activeTab === 'Different Lines' && (
           <div className="space-y-8">
-            {/* Different Lines Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {[
-                { label: 'TOTAL NTN RECORDS', value: ntnRecords.length.toLocaleString(), icon: FileText, color: 'blue', bg: 'bg-blue-50/50', iconBg: 'bg-blue-500' },
-                { label: 'CURRENT RESULTS', value: differentLinesResults.length.toLocaleString(), icon: Search, color: 'purple', bg: 'bg-purple-50/50', iconBg: 'bg-purple-500' },
-                { label: 'EXTRACTED NTN', value: differentLinesResults.filter(r => r.status === 'Filled').length.toLocaleString(), icon: CheckCircle2, color: 'blue', bg: 'bg-blue-50/50', iconBg: 'bg-blue-500' },
-                { label: 'NO NTN FOUND', value: differentLinesResults.filter(r => r.status === 'Not Found').length.toLocaleString(), icon: XCircle, color: 'gray', bg: 'bg-gray-50/50', iconBg: 'bg-gray-400' },
-              ].map((stat, i) => (
-                <div key={i} className={`${stat.bg} border border-gray-100 p-6 rounded-[32px] flex flex-col items-center text-center transition-all hover:shadow-lg group`}>
-                  <div className={`w-12 h-12 ${stat.iconBg} rounded-2xl flex items-center justify-center text-white shadow-lg shadow-current/20 mb-4 group-hover:scale-110 transition-transform`}>
-                    <stat.icon size={24} />
-                  </div>
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
-                  <p className={`text-2xl font-black text-gray-800 tracking-tight`}>{stat.value}</p>
-                </div>
-              ))}
-            </div>
-
             <div className="bg-white rounded-[40px] p-10 shadow-sm border border-gray-100">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
@@ -3939,16 +4058,33 @@ function AppContent() {
 
               {differentLinesResults.length > 0 && (
                 <div className="mt-10">
+                  {/* Different Lines Stats - Moved inside results area for better visibility */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+                    {[
+                      { label: 'TOTAL RESULTS', value: differentLinesResults.length.toLocaleString(), icon: Search, color: 'purple', bg: 'bg-purple-50/50', iconBg: 'bg-purple-500' },
+                      { label: 'EXTRACTED NTN', value: differentLinesResults.filter(r => r.status === 'Filled').length.toLocaleString(), icon: CheckCircle2, color: 'blue', bg: 'bg-blue-50/50', iconBg: 'bg-blue-500' },
+                      { label: 'NO NTN FOUND', value: differentLinesResults.filter(r => r.status === 'Not Found').length.toLocaleString(), icon: XCircle, color: 'gray', bg: 'bg-gray-50/50', iconBg: 'bg-gray-400' },
+                    ].map((stat, i) => (
+                      <div key={i} className={`${stat.bg} border border-gray-100 p-6 rounded-[32px] flex flex-col items-center text-center transition-all hover:shadow-lg group`}>
+                        <div className={`w-12 h-12 ${stat.iconBg} rounded-2xl flex items-center justify-center text-white shadow-lg shadow-current/20 mb-4 group-hover:scale-110 transition-transform`}>
+                          <stat.icon size={24} />
+                        </div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                        <p className={`text-2xl font-black text-gray-800 tracking-tight`}>{stat.value}</p>
+                      </div>
+                    ))}
+                  </div>
+
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">Processing Results ({differentLinesResults.length})</h3>
                     <div className="flex items-center space-x-4">
                       <div className="flex items-center space-x-2">
                         <div className="w-3 h-3 rounded-full bg-blue-500" />
-                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Filled</span>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">NTN Extracted</span>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <div className="w-3 h-3 rounded-full bg-gray-300" />
-                        <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Not Found</span>
+                        <div className="w-3 h-3 rounded-full bg-gray-400" />
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">Not Found</span>
                       </div>
                     </div>
                   </div>
@@ -4415,6 +4551,279 @@ function AppContent() {
                     >
                       Delete Now
                     </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* NTN Records List Modal */}
+          <AnimatePresence>
+            {isNtnRecordsModalOpen && (
+              <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                  className="bg-white rounded-[32px] w-full max-w-5xl h-[80vh] shadow-2xl overflow-hidden flex flex-col"
+                >
+                  <div className="p-8 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between bg-white sticky top-0 z-10 gap-4">
+                    <div>
+                      <h3 className="text-2xl font-black text-gray-800 tracking-tight">Companies List</h3>
+                      <p className="text-gray-500 text-sm font-medium">Manage all stored company records ({ntnRecords.length})</p>
+                    </div>
+                    
+                    <div className="flex-1 max-w-md flex items-center space-x-2">
+                      <div className="relative flex-1">
+                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                          <Search size={18} />
+                        </div>
+                        <input 
+                          type="text"
+                          placeholder="Search company by name..."
+                          value={ntnRecordsSearchQuery}
+                          onChange={(e) => setNtnRecordsSearchQuery(e.target.value)}
+                          className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-bold text-gray-800"
+                        />
+                        {ntnRecordsSearchQuery && (
+                          <button 
+                            onClick={() => setNtnRecordsSearchQuery('')}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          >
+                            <X size={16} />
+                          </button>
+                        )}
+                      </div>
+                      <button 
+                        onClick={() => setShowDuplicatesOnly(!showDuplicatesOnly)}
+                        className={`px-4 py-3 rounded-xl font-bold transition-all flex items-center space-x-2 border ${
+                          showDuplicatesOnly 
+                            ? 'bg-amber-50 border-amber-200 text-amber-600' 
+                            : 'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'
+                        }`}
+                        title="Show records with duplicate NTN or CNIC"
+                      >
+                        <Layers size={18} />
+                        <span className="hidden sm:inline">Duplicates</span>
+                      </button>
+                    </div>
+
+                    <div className="flex items-center space-x-4">
+                      <button 
+                        onClick={() => {
+                          if (selectedNtnRecords.length === 0 || isDeletingBulk) {
+                            setError('Please select at least one record to delete.');
+                            setTimeout(() => setError(''), 3000);
+                            return;
+                          }
+                          if (window.confirm(`Are you sure you want to delete ${selectedNtnRecords.length} records?`)) {
+                            confirmDeleteSelectedNtnRecords();
+                          }
+                        }}
+                        disabled={isDeletingBulk}
+                        className={`px-6 py-3 rounded-xl font-bold transition-all flex items-center space-x-2 ${
+                          selectedNtnRecords.length > 0 && !isDeletingBulk
+                            ? 'bg-red-600 text-white shadow-lg shadow-red-600/20 hover:bg-red-700' 
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {isDeletingBulk ? (
+                          <RefreshCw size={18} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={18} />
+                        )}
+                        <span>{isDeletingBulk ? 'Deleting...' : `Delete Selected ${selectedNtnRecords.length > 0 ? `(${selectedNtnRecords.length})` : ''}`}</span>
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setIsNtnRecordsModalOpen(false);
+                          setSelectedNtnRecords([]);
+                          setNtnRecordsSearchQuery('');
+                          setShowDuplicatesOnly(false);
+                        }}
+                        className="p-3 bg-gray-50 text-gray-400 rounded-xl hover:bg-gray-100 transition-all"
+                      >
+                        <X size={24} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-8">
+                    {(() => {
+                      const filtered = ntnRecords.filter(r => {
+                        const matchesSearch = (r.name || '').toLowerCase().includes(ntnRecordsSearchQuery.toLowerCase()) ||
+                          (r.ntn || '').toLowerCase().includes(ntnRecordsSearchQuery.toLowerCase()) ||
+                          (r.cnic || '').toLowerCase().includes(ntnRecordsSearchQuery.toLowerCase());
+                        
+                        if (!showDuplicatesOnly) return matchesSearch;
+
+                        const hasDuplicateNtn = r.ntn && ntnRecords.some(other => other.id !== r.id && other.ntn === r.ntn);
+                        const hasDuplicateCnic = r.cnic && ntnRecords.some(other => other.id !== r.id && other.cnic === r.cnic);
+                        
+                        return matchesSearch && (hasDuplicateNtn || hasDuplicateCnic);
+                      });
+
+                      // Map with duplicate info for sorting and highlighting
+                      const recordsWithDupInfo = filtered.map(r => {
+                        const hasDuplicateNtn = r.ntn && ntnRecords.some(other => other.id !== r.id && other.ntn === r.ntn);
+                        const hasDuplicateCnic = r.cnic && ntnRecords.some(other => other.id !== r.id && other.cnic === r.cnic);
+                        
+                        return {
+                          ...r,
+                          isDuplicate: hasDuplicateNtn || hasDuplicateCnic,
+                          duplicateKey: hasDuplicateNtn ? `ntn-${r.ntn}` : (hasDuplicateCnic ? `cnic-${r.cnic}` : null)
+                        };
+                      });
+
+                      // Sort by duplicate key if showing duplicates
+                      if (showDuplicatesOnly) {
+                        recordsWithDupInfo.sort((a, b) => {
+                          if (a.duplicateKey && b.duplicateKey) {
+                            return a.duplicateKey.localeCompare(b.duplicateKey);
+                          }
+                          return 0;
+                        });
+                      }
+
+                      return (
+                        <div className="overflow-hidden rounded-2xl border border-gray-100 shadow-sm">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-gray-50/50">
+                                <th className="p-4 border-b border-gray-100">
+                                  <input 
+                                    type="checkbox"
+                                    checked={filtered.length > 0 && filtered.every(r => selectedNtnRecords.includes(r.id))}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        const newSelected = [...new Set([...selectedNtnRecords, ...filtered.map(r => r.id)])];
+                                        setSelectedNtnRecords(newSelected);
+                                      } else {
+                                        const filteredIds = filtered.map(r => r.id);
+                                        setSelectedNtnRecords(selectedNtnRecords.filter(id => !filteredIds.includes(id)));
+                                      }
+                                    }}
+                                    className="w-5 h-5 rounded-md border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                </th>
+                                <th className="p-4 border-b border-gray-100 text-xs font-black text-gray-400 uppercase tracking-widest">Company Name</th>
+                                <th className="p-4 border-b border-gray-100 text-xs font-black text-gray-400 uppercase tracking-widest">NTN</th>
+                                <th className="p-4 border-b border-gray-100 text-xs font-black text-gray-400 uppercase tracking-widest">CNIC</th>
+                                <th className="p-4 border-b border-gray-100 text-xs font-black text-gray-400 uppercase tracking-widest">Status</th>
+                                <th className="p-4 border-b border-gray-100 text-xs font-black text-gray-400 uppercase tracking-widest">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-50">
+                              {recordsWithDupInfo.length > 0 ? recordsWithDupInfo.map((record, idx) => {
+                                // Determine if this is a new duplicate group for visual separation
+                                const isNewGroup = showDuplicatesOnly && idx > 0 && record.duplicateKey !== recordsWithDupInfo[idx - 1].duplicateKey;
+                                
+                                return (
+                                  <tr 
+                                    key={record.id} 
+                                    className={`hover:bg-gray-50/50 transition-colors group ${
+                                      isNewGroup ? 'border-t-2 border-amber-200' : ''
+                                    } ${
+                                      record.isDuplicate ? 'bg-amber-50/40' : ''
+                                    }`}
+                                  >
+                                    <td className="p-4">
+                                      <input 
+                                        type="checkbox"
+                                        checked={selectedNtnRecords.includes(record.id)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedNtnRecords([...selectedNtnRecords, record.id]);
+                                          } else {
+                                            setSelectedNtnRecords(selectedNtnRecords.filter(id => id !== record.id));
+                                          }
+                                        }}
+                                        className="w-5 h-5 rounded-md border-gray-300 text-blue-600 focus:ring-blue-500"
+                                      />
+                                    </td>
+                                    <td className="p-4">
+                                      <div className="flex flex-col">
+                                        <div className="flex items-center space-x-2">
+                                          <span className="text-sm font-bold text-gray-800">{record.name}</span>
+                                          {record.isDuplicate && (
+                                            <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[8px] font-black uppercase rounded tracking-tighter">Duplicate</span>
+                                          )}
+                                        </div>
+                                        <span className="text-[10px] text-gray-400 font-bold">Ref: #{record.ref}</span>
+                                      </div>
+                                    </td>
+                                    <td className="p-4">
+                                      <span className={`text-sm font-mono font-bold ${
+                                        record.duplicateKey?.startsWith('ntn-') ? 'text-amber-600 bg-amber-100/50 px-1 rounded' : 'text-blue-600'
+                                      }`}>
+                                        {record.ntn || 'N/A'}
+                                      </span>
+                                    </td>
+                                    <td className="p-4">
+                                      <span className={`text-sm font-mono font-bold ${
+                                        record.duplicateKey?.startsWith('cnic-') ? 'text-amber-600 bg-amber-100/50 px-1 rounded' : 'text-gray-500'
+                                      }`}>
+                                        {record.cnic || 'N/A'}
+                                      </span>
+                                    </td>
+                                    <td className="p-4">
+                                      <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                                        record.status === 'Active' ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'
+                                      }`}>
+                                        {record.status}
+                                      </span>
+                                    </td>
+                                    <td className="p-4">
+                                      <div className="flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <button 
+                                          onClick={() => handleViewDetails(record)}
+                                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                          title="View"
+                                        >
+                                          <Eye size={16} />
+                                        </button>
+                                        <button 
+                                          onClick={() => handleEdit(record)}
+                                          className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                          title="Edit"
+                                        >
+                                          <Edit2 size={16} />
+                                        </button>
+                                        <button 
+                                          onClick={() => handleDeleteRecord(getCollectionName('NTN Search'), record.id)}
+                                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                          title="Delete"
+                                        >
+                                          <Trash2 size={16} />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              }) : (
+                                <tr>
+                                  <td colSpan={6} className="p-12 text-center">
+                                    <div className="flex flex-col items-center justify-center text-gray-400">
+                                      <Search size={48} className="mb-4 opacity-20" />
+                                      <p className="text-sm font-bold">No companies found matching your criteria</p>
+                                      <button 
+                                        onClick={() => {
+                                          setNtnRecordsSearchQuery('');
+                                          setShowDuplicatesOnly(false);
+                                        }}
+                                        className="mt-2 text-blue-600 hover:underline text-xs font-bold"
+                                      >
+                                        Clear all filters
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </motion.div>
               </div>
