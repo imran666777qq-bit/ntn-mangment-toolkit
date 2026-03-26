@@ -33,7 +33,7 @@ export default function SplashScreen() {
 
       <div className="relative z-10 flex flex-col items-center max-w-4xl w-full px-4">
         {/* FedEx Logo Animation */}
-        <div className="flex items-baseline font-black text-7xl md:text-9xl tracking-tighter mb-4 filter drop-shadow-2xl">
+        <div className="flex items-baseline font-black text-6xl md:text-8xl tracking-tighter mb-4 filter drop-shadow-2xl">
           <motion.span
             initial={{ opacity: 0, x: -450 }}
             animate={{ opacity: 1, x: 0 }}
@@ -59,7 +59,7 @@ export default function SplashScreen() {
               initial={{ opacity: 0, y: -60 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2, duration: 0.6 }}
-              className="text-2xl md:text-3xl font-bold tracking-[0.2em] text-white uppercase italic"
+              className="text-xl md:text-2xl font-bold tracking-[0.2em] text-white uppercase italic"
             >
               NTN
             </motion.span>
@@ -67,7 +67,7 @@ export default function SplashScreen() {
               initial={{ opacity: 0, y: -60 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6, duration: 0.6 }}
-              className="text-2xl md:text-3xl font-bold tracking-[0.2em] text-white uppercase italic"
+              className="text-xl md:text-2xl font-bold tracking-[0.2em] text-white uppercase italic"
             >
               MANAGEMENT
             </motion.span>
@@ -76,7 +76,7 @@ export default function SplashScreen() {
           {/* Separator Line */}
           <motion.div
             initial={{ width: 0 }}
-            animate={{ width: "100%", maxWidth: "360px" }}
+            animate={{ width: "100%", maxWidth: "320px" }}
             transition={{ delay: 1.2, duration: 0.8 }}
             className="h-[3px] bg-gradient-to-r from-[#4D148C] to-[#FF6600] shadow-[0_0_10px_rgba(255,102,0,0.5)] rounded-full"
           />
@@ -87,7 +87,7 @@ export default function SplashScreen() {
               initial={{ opacity: 0, y: 60 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1.4, duration: 0.6 }}
-              className="text-base md:text-lg font-bold tracking-[0.5em] text-white uppercase"
+              className="text-sm md:text-base font-bold tracking-[0.5em] text-white uppercase"
             >
               SHIPMENTS
             </motion.span>
@@ -95,7 +95,7 @@ export default function SplashScreen() {
               initial={{ opacity: 0, y: 60 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1.8, duration: 0.6 }}
-              className="text-base md:text-lg font-bold tracking-[0.5em] text-[#FF6600] uppercase"
+              className="text-sm md:text-base font-bold tracking-[0.5em] text-[#FF6600] uppercase"
             >
               TOOLKIT
             </motion.span>

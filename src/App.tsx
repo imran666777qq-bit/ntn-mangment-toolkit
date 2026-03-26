@@ -161,7 +161,7 @@ function AppContent() {
     if (showSplash) {
       const timer = setTimeout(() => {
         setShowSplash(false);
-      }, 5000);
+      }, 7000); // Increased to 7 seconds to ensure animation completes
       return () => clearTimeout(timer);
     }
   }, [showSplash]);
@@ -1943,7 +1943,8 @@ function AppContent() {
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Top Header */}
           <header className="h-20 bg-white border-b border-gray-200 px-8 flex items-center justify-between z-10">
-            <div className="flex flex-1 items-center space-x-4">
+            <div className="flex flex-1 items-center justify-between max-w-[1600px] mx-auto w-full">
+              <div className="flex items-center space-x-4">
               <div 
                 onClick={() => setHeaderColorStyle((prev) => (prev + 1) % 6)}
                 className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm cursor-pointer transition-all hover:scale-110 active:scale-95 ${
@@ -2158,11 +2159,13 @@ function AppContent() {
                 </AnimatePresence>
               </div>
             </div>
-          </header>
+          </div>
+        </header>
 
           {/* Scrollable Area */}
           <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-            {activeTab === 'User Management' && user?.email === ADMIN_EMAIL && (
+            <div className="max-w-[1600px] mx-auto w-full">
+              {activeTab === 'User Management' && user?.email === ADMIN_EMAIL && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between mb-8">
                   <div>
@@ -2375,7 +2378,7 @@ function AppContent() {
                 )}
 
                 {/* Stats Cards */}
-                <div className="grid grid-cols-4 gap-6 mb-10">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
                   {[
                     { label: 'NTN TOTAL RECORDS', value: ntnRecords.length.toLocaleString(), icon: FileText, color: 'blue', bg: 'bg-blue-50/50', iconBg: 'bg-blue-500' },
                     { label: 'HS CODE RESULTS', value: hsCodeResults.length.toLocaleString(), icon: BarChart3, color: 'purple', bg: 'bg-purple-50/50', iconBg: 'bg-purple-500' },
@@ -2397,8 +2400,8 @@ function AppContent() {
                   ))}
                 </div>
 
-            {/* Unified Data Table */}
-            <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100">
+                {/* Unified Data Table */}
+                <div className="bg-white rounded-[32px] p-6 shadow-sm border border-gray-100">
               <div className="flex items-center justify-between mb-6">
                 <div>
                   <h3 className="text-lg font-black text-gray-800 tracking-tight">Recent NTN Records</h3>
@@ -4855,10 +4858,11 @@ function AppContent() {
               </div>
             )}
           </AnimatePresence>
-        </main>
-      </div>
-    );
-  }
+        </div>
+      </main>
+    </div>
+  );
+}
 
   if (!user) {
     return (

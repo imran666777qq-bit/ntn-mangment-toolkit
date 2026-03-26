@@ -142,8 +142,8 @@ export default function LoginPage({
         <div className="blob"></div>
         <div className="grid-3d"></div>
         
-        <div className="relative z-20 text-center text-white p-16 bg-white/5 backdrop-blur-[30px] rounded-[48px] border border-white/10 shadow-[0_50px_120px_rgba(0,0,0,0.5)] max-w-[80%] w-[580px]">
-          <div className="flex justify-center text-[100px] -tracking-[8px] font-['Arial_Black',sans-serif] leading-[0.85]">
+        <div className="relative z-20 text-center text-white p-12 bg-white/5 backdrop-blur-[30px] rounded-[48px] border border-white/10 shadow-[0_50px_120px_rgba(0,0,0,0.5)] max-w-[85%] w-[540px]">
+          <div className="flex justify-center text-[80px] -tracking-[6px] font-['Arial_Black',sans-serif] leading-[0.85]">
             <span className="char char-1 text-white">F</span>
             <span className="char char-2 text-white">e</span>
             <span className="char char-3 text-white">d</span>
@@ -151,14 +151,14 @@ export default function LoginPage({
             <span className="char char-5 text-[#FF6600]">x</span>
           </div>
           <div 
-            className="italic text-[42px] font-black mt-5 -tracking-[1px] text-white opacity-0 scale-[1.5]"
+            className="italic text-[36px] font-black mt-5 -tracking-[1px] text-white opacity-0 scale-[1.5]"
             style={{ animation: 'zoomInEffect 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards 0.8s' }}
           >
             <span className="text-orange-500">NTN</span> MANAGEMENT
           </div>
           
           <div 
-            className="h-[6px] w-0 my-6 rounded-full overflow-hidden flex"
+            className="h-[5px] w-0 my-6 rounded-full overflow-hidden flex"
             style={{ animation: 'expandLine 1.2s ease forwards 1s' }}
           >
             <div className="flex-1 bg-white/80"></div>
@@ -166,7 +166,7 @@ export default function LoginPage({
           </div>
           
           <div 
-            className="text-[18px] font-semibold text-[#FF6600] tracking-[5px] uppercase opacity-0 translate-y-[30px]"
+            className="text-[16px] font-semibold text-[#FF6600] tracking-[4px] uppercase opacity-0 translate-y-[30px]"
             style={{ animation: 'slideUpEffect 0.8s ease-out forwards 1.2s' }}
           >
             & SHIPMENTS TOOLKIT
@@ -175,9 +175,9 @@ export default function LoginPage({
       </div>
 
       {/* Right Login Section */}
-      <div className="flex-[0.9] flex justify-center items-center bg-white relative p-10 overflow-y-auto">
+      <div className="flex-[0.9] flex justify-center items-center bg-white relative p-6 overflow-y-auto">
         <div 
-          className="login-card relative z-10 w-full max-w-[440px] bg-white p-12 pt-14 pb-10 text-[#1e293b] border border-[#f1f5f9] shadow-[0_30px_70px_-15px_rgba(0,0,0,0.08)] opacity-0 translate-y-[30px]"
+          className="login-card relative z-10 w-full max-w-[420px] bg-white p-10 pt-12 pb-8 text-[#1e293b] border border-[#f1f5f9] shadow-[0_30px_70px_-15px_rgba(0,0,0,0.08)] opacity-0 translate-y-[30px]"
           style={{ animation: 'cardEntrance 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards' }}
         >
           {/* Animated Logo Header */}
@@ -214,7 +214,7 @@ export default function LoginPage({
           </div>
           
           <h1 
-            className="text-[34px] font-extrabold text-[#0f172a] mb-8 uppercase -tracking-[1.2px] border-l-[6px] border-[#FF6600] pl-[18px] opacity-0 -translate-x-[15px]"
+            className="text-[28px] font-extrabold text-[#0f172a] mb-6 uppercase -tracking-[1.2px] border-l-[6px] border-[#FF6600] pl-[18px] opacity-0 -translate-x-[15px]"
             style={{ animation: 'slideInLeft 0.5s ease-out forwards 0.6s' }}
           >
             {isResetMode ? 'RESET' : (isLogin ? 'LOGIN' : 'SIGN UP')}
