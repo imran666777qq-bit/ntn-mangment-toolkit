@@ -12,6 +12,8 @@ import {
   confirmPasswordReset, updateProfile, updatePassword
 } from 'firebase/auth';
 import { db, auth } from './firebase';
+import SplashScreen from './components/SplashScreen';
+import LoginPage from './components/LoginPage';
 import { 
   User, Lock, Eye, EyeOff, ChevronRight, Package, LogOut, LayoutDashboard, 
   Truck, Settings, AlertCircle, CheckCircle2, Search, FileCode, RefreshCw, 
@@ -133,6 +135,7 @@ const getRawNtn = (ntn: string) => {
 
 // --- Main App Component ---
 function AppContent() {
+  const [showSplash, setShowSplash] = useState(true);
   const [isLogin, setIsLogin] = useState(true);
   const [isResetMode, setIsResetMode] = useState(false);
   const [resetCode, setResetCode] = useState('');
@@ -153,6 +156,26 @@ function AppContent() {
   const [emailjsServiceId, setEmailjsServiceId] = useState('');
   const [emailjsTemplateId, setEmailjsTemplateId] = useState('');
   const [emailjsPublicKey, setEmailjsPublicKey] = useState('');
+
+  useEffect(() => {
+    if (showSplash) {
+      const timer = setTimeout(() => {
+        setShowSplash(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSplash]);
+
+  // Show splash when returning to tab if logged out
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !user && !showSplash && !authLoading) {
+        setShowSplash(true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [user, showSplash, authLoading]);
 
   // Fetch Settings
   useEffect(() => {
@@ -667,8 +690,9 @@ function AppContent() {
       
       if (match) {
         foundNtn = match.ntn || match.cnic || '';
-        if (foundNtn && !foundNtn.toUpperCase().startsWith('NTN')) {
-          foundNtn = `NTN ${foundNtn}`;
+        // Remove NTN prefix if it exists to satisfy user request for this tool
+        if (foundNtn) {
+          foundNtn = foundNtn.replace(/^NTN\s*/i, '');
         }
         
         const rawFound = getRawNtn(foundNtn);
@@ -691,7 +715,8 @@ function AppContent() {
           if (!foundNtn) {
             const match = text.match(NTN_REGEX);
             if (match) {
-              foundNtn = cleanNtnValue(match[0]);
+              // Remove "NTN " prefix from the cleaned value for this tool
+              foundNtn = cleanNtnValue(match[0]).replace(/^NTN\s+/i, '');
               
               const rawFound = getRawNtn(foundNtn);
               const finalRaw = getRawNtn(shipperCompany);
@@ -1564,6 +1589,7 @@ function AppContent() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
+      setShowSplash(true);
       setSuccessMessage('Logged out successfully');
       setTimeout(() => setSuccessMessage(''), 2000);
     } catch (err: any) {
@@ -4834,224 +4860,62 @@ function AppContent() {
     );
   }
 
-  return (
-    <div className="min-h-screen w-full flex flex-col md:flex-row bg-gray-100 font-sans overflow-hidden">
-      {/* Left Side - Branding */}
-      <div className="w-full md:w-[55%] bg-gradient-to-br from-[#0056b3] to-[#003d80] relative flex flex-col items-center justify-center p-12 text-white overflow-hidden">
-        {/* Decorative Curves */}
-        <div className="absolute bottom-[-10%] left-[-10%] w-[60%] h-[60%] border-[1px] border-white/10 rounded-full" />
-        <div className="absolute bottom-[-20%] left-[-20%] w-[80%] h-[80%] border-[1px] border-white/5 rounded-full" />
-        
-        <motion.div 
-          initial={{ opacity: 0, x: -30 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.8 }}
-          className="relative z-10 text-center md:text-left max-w-md"
-        >
-          <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center p-3 mb-8 shadow-2xl rotate-3">
-            <img 
-              src="https://www.vectorlogo.zone/logos/fedex/fedex-ar21.svg" 
-              alt="FedEx Logo" 
-              className="w-full h-full object-contain"
-              referrerPolicy="no-referrer"
-            />
-          </div>
-          <h1 className="text-4xl md:text-6xl font-black tracking-tighter leading-tight mb-4">
-            ɴᴛɴ ꜱᴇᴀʀᴄʜ &<br />
-            ᴍᴀɴᴀɢᴇᴍᴇɴᴛ ᴛᴏᴏʟ
-          </h1>
-          <p className="text-blue-100/80 text-lg font-medium mb-8 leading-relaxed">
-            The most advanced shipment and tax management toolkit for professional logistics.
-          </p>
-          <button 
-            className="px-8 py-3 bg-blue-500 hover:bg-blue-400 text-white font-bold rounded-lg transition-all shadow-lg shadow-black/20"
-            onClick={() => window.open('https://www.fedex.com', '_blank')}
-          >
-            Read More
-          </button>
-        </motion.div>
-      </div>
-
-      {/* Right Side - Login Form */}
-      <div className="w-full md:w-[45%] bg-white flex flex-col items-center justify-center p-8 md:p-16 relative">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-          className="w-full max-w-sm"
-        >
-          <div className="mb-10 text-center md:text-left">
-            <h2 className="text-3xl font-black text-gray-900 mb-2">
-              {isLogin ? 'Hello Again!' : 'Create Account'}
-            </h2>
-            <p className="text-gray-500 font-medium">
-              {isLogin ? 'Welcome Back' : 'Join the NTN Management System'}
-            </p>
-          </div>
-
-          {!isResetMode ? (
-            <form onSubmit={handleLogin} className="space-y-6">
-              {error && (
-                <div className="bg-red-50 border border-red-100 rounded-xl p-4 flex items-start space-x-3 text-red-600 text-xs">
-                  <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                  <span>{error}</span>
-                </div>
-              )}
-              {successMessage && (
-                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex items-center space-x-3 text-emerald-600 text-xs">
-                  <CheckCircle2 size={16} />
-                  <span>{successMessage}</span>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <div className="relative group">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors">
-                    <Mail size={18} />
-                  </div>
-                  <input 
-                    type="email"
-                    placeholder="Email Address"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-full py-4 pl-12 pr-4 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all shadow-sm"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="relative group">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors">
-                    <Lock size={18} />
-                  </div>
-                  <input 
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-gray-50 border border-gray-200 rounded-full py-4 pl-12 pr-12 text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all shadow-sm"
-                    required
-                  />
-                  <button 
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} /> }
-                  </button>
-                </div>
-              </div>
-
-              <button 
-                type="submit"
-                disabled={loading}
-                className="w-full bg-[#007bff] hover:bg-[#0069d9] text-white font-bold py-4 rounded-full shadow-lg shadow-blue-500/30 transition-all active:scale-[0.98] disabled:opacity-70"
-              >
-                {loading ? 'Processing...' : (isLogin ? 'Login' : 'Sign Up')}
-              </button>
-
-              <div className="flex flex-col space-y-4 text-center">
-                <button 
-                  type="button" 
-                  onClick={() => setIsLogin(!isLogin)}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-bold transition-colors"
-                >
-                  {isLogin ? "Don't have an account? Create one" : "Already have an account? Login"}
-                </button>
-                
-                {isLogin && (
-                  <button 
-                    type="button" 
-                    onClick={handleForgotPassword}
-                    className="text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors"
-                  >
-                    Forgot Password?
-                  </button>
-                )}
-              </div>
-
-              <div className="pt-4 flex items-center space-x-4">
-                <div className="flex-1 h-px bg-gray-100" />
-                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Or</span>
-                <div className="flex-1 h-px bg-gray-100" />
-              </div>
-
-              <button 
-                type="button"
-                onClick={handleGoogleLogin}
-                className="w-full bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 font-bold py-3.5 rounded-full flex items-center justify-center space-x-3 transition-all shadow-sm"
-              >
-                <img src="https://www.vectorlogo.zone/logos/google/google-icon.svg" alt="Google" className="w-5 h-5" />
-                <span className="text-sm">Sign in with Google</span>
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleConfirmResetPassword} className="space-y-6">
-              <div className="mb-4 p-4 bg-blue-50 border border-blue-100 rounded-2xl">
-                <p className="text-xs text-blue-600 font-medium leading-relaxed">
-                  Enter the <strong>Code</strong> from your email and your <strong>New Password</strong>.
-                </p>
-              </div>
-
-              {error && (
-                <div className="bg-red-50 border border-red-100 rounded-xl p-4 text-red-600 text-xs">
-                  <span>{error}</span>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <input 
-                  type="text"
-                  placeholder="Reset Code"
-                  value={resetCode}
-                  onChange={(e) => setResetCode(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-full py-4 px-6 text-gray-900 focus:outline-none focus:border-blue-500 transition-all"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <input 
-                  type="password"
-                  placeholder="New Password"
-                  value={resetNewPassword}
-                  onChange={(e) => setResetNewPassword(e.target.value)}
-                  className="w-full bg-gray-50 border border-gray-200 rounded-full py-4 px-6 text-gray-900 focus:outline-none focus:border-blue-500 transition-all"
-                  required
-                />
-              </div>
-
-              <button 
-                type="submit"
-                disabled={loading}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-4 rounded-full shadow-lg transition-all"
-              >
-                Update Password
-              </button>
-
-              <button 
-                type="button"
-                onClick={() => setIsResetMode(false)}
-                className="w-full text-sm text-gray-500 hover:text-gray-800 font-medium transition-colors"
-              >
-                Back to Login
-              </button>
-            </form>
-          )}
-        </motion.div>
-
-        {/* Footer */}
-        <div className="absolute bottom-10 left-1/2 -translate-x-1/2 text-center">
-          <motion.p 
-            initial={{ opacity: 0 }}
+  if (!user) {
+    return (
+      <AnimatePresence mode="wait">
+        {showSplash ? (
+          <motion.div key="splash" exit={{ opacity: 0 }} className="fixed inset-0 z-[9999]">
+            <SplashScreen />
+          </motion.div>
+        ) : (
+          <motion.div 
+            key="login" 
+            initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="text-[10px] text-blue-400/80 font-bold uppercase tracking-[0.2em] whitespace-nowrap"
+            className="fixed inset-0 z-[9998]"
           >
-            © 2025 NTN Management System • Created by Imran Ahmed
-          </motion.p>
+            <LoginPage 
+              email={email}
+              setEmail={setEmail}
+              password={password}
+              setPassword={setPassword}
+              handleLogin={handleLogin}
+              handleGoogleLogin={handleGoogleLogin}
+              handleForgotPassword={handleForgotPassword}
+              isLogin={isLogin}
+              setIsLogin={setIsLogin}
+              loading={loading}
+              error={error}
+              successMessage={successMessage}
+              isResetMode={isResetMode}
+              setIsResetMode={setIsResetMode}
+              resetCode={resetCode}
+              setResetCode={setResetCode}
+              resetNewPassword={resetNewPassword}
+              setResetNewPassword={setResetNewPassword}
+              handleConfirmResetPassword={handleConfirmResetPassword}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    );
+  }
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0a192f] p-6">
+      <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-[40px] p-12 max-w-md w-full text-center shadow-2xl">
+        <div className="w-24 h-24 bg-blue-500 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-lg shadow-blue-500/20">
+          <ShieldCheck className="text-white" size={48} />
         </div>
+        <h2 className="text-3xl font-black text-white mb-4 tracking-tight">Pending Approval</h2>
+        <p className="text-blue-100/60 mb-8 leading-relaxed">
+          Your account has been created successfully. Please wait for the administrator to approve your access.
+        </p>
+        <button 
+          onClick={handleLogout}
+          className="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-4 rounded-2xl transition-all border border-white/10"
+        >
+          Sign Out
+        </button>
       </div>
     </div>
   );
