@@ -1,4 +1,7 @@
 import { motion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
+import * as THREE from "three";
+import { ShieldCheck, Lock, LockOpen, Search, LogIn, UserPlus, Mail, Key, Chrome } from "lucide-react";
 
 interface LoginPageProps {
   email: string;
@@ -22,203 +25,339 @@ interface LoginPageProps {
   handleConfirmResetPassword: (e: React.FormEvent) => void;
 }
 
+const ThreeBackground = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const container = containerRef.current;
+    console.log("ThreeBackground mounting, container size:", container.clientWidth, container.clientHeight);
+    
+    // Ensure container has dimensions
+    const width = container.clientWidth || window.innerWidth;
+    const height = container.clientHeight || window.innerHeight;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, width / height, 1, 1000);
+    camera.position.z = 50;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setClearColor(0x0a0212, 1); // Match brand-section color
+    renderer.domElement.style.position = 'absolute';
+    renderer.domElement.style.top = '0';
+    renderer.domElement.style.left = '0';
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+    container.appendChild(renderer.domElement);
+
+    // Lights
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+
+    const orangeLight = new THREE.PointLight(0xFF6600, 100, 300);
+    orangeLight.position.set(50, 50, 50);
+    scene.add(orangeLight);
+
+    const purpleLight = new THREE.PointLight(0x4D148C, 100, 300);
+    purpleLight.position.set(-50, -50, 50);
+    scene.add(purpleLight);
+
+    const ribbons: THREE.Mesh[] = [];
+    const geom = new THREE.PlaneGeometry(50, 4, 32);
+    for (let i = 0; i < 25; i++) {
+      const color = i % 2 === 0 ? 0x4D148C : 0xFF6600;
+      const mat = new THREE.MeshStandardMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: 0.2,
+        transparent: true,
+        opacity: 0.4,
+        side: THREE.DoubleSide,
+        roughness: 0.3,
+        metalness: 0.8
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.position.set((Math.random() - 0.5) * 120, (Math.random() - 0.5) * 120, (Math.random() - 0.5) * 60);
+      mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+      ribbons.push(mesh);
+      scene.add(mesh);
+    }
+
+    let animationId: number;
+    const animate = () => {
+      animationId = requestAnimationFrame(animate);
+      ribbons.forEach(r => {
+        r.rotation.x += 0.003;
+        r.rotation.y += 0.003;
+      });
+      renderer.render(scene, camera);
+    };
+
+    animate();
+
+    const handleResize = () => {
+      const newWidth = container.clientWidth;
+      const newHeight = container.clientHeight;
+      camera.aspect = newWidth / newHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(newWidth, newHeight);
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      console.log("ThreeBackground unmounting");
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animationId);
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
+      renderer.dispose();
+      geom.dispose();
+      ribbons.forEach(r => {
+        (r.material as THREE.Material).dispose();
+      });
+    };
+  }, []);
+
+  return <div id="three-canvas-container" ref={containerRef} style={{ pointerEvents: 'none' }} />;
+};
+
 export default function LoginPage({
   email, setEmail, password, setPassword, handleLogin, handleGoogleLogin,
   handleForgotPassword, isLogin, setIsLogin, loading, error, successMessage,
   isResetMode, setIsResetMode, resetCode, setResetCode, resetNewPassword,
   setResetNewPassword, handleConfirmResetPassword
 }: LoginPageProps) {
-  return (
-    <div className="h-screen w-full flex bg-white overflow-hidden relative font-['Plus_Jakarta_Sans',sans-serif]">
-      <style dangerouslySetInnerHTML={{ __html: `
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+  const [isSuccess, setIsSuccess] = useState(false);
 
+  useEffect(() => {
+    if (successMessage) {
+      setIsSuccess(true);
+      const timer = setTimeout(() => setIsSuccess(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
+
+  return (
+    <div className="h-screen w-full flex flex-col lg:flex-row bg-[#0a0212] overflow-hidden font-['Inter',sans-serif]">
+      <style dangerouslySetInnerHTML={{ __html: `
         :root {
           --fedex-purple: #4D148C;
           --fedex-orange: #FF6600;
         }
 
-        @keyframes gridMove {
-          from { transform: rotateX(60deg) translateY(0); }
-          to { transform: rotateX(60deg) translateY(60px); }
+        .brand-section {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
         }
 
-        @keyframes moveBlob {
-          0% { transform: translate(-15%, -15%) scale(1); }
-          100% { transform: translate(15%, 15%) scale(1.2); }
+        #three-canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
         }
 
-        @keyframes dropChar {
-          to { transform: translateY(0); opacity: 1; }
+        .logo-card {
+            position: relative;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(30px);
+            padding: clamp(2rem, 5vh, 4.5rem);
+            border-radius: 50px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            box-shadow: 0 50px 100px rgba(0,0,0,0.8);
+            transform: scale(clamp(0.6, 0.9vw, 1));
         }
 
-        @keyframes zoomInEffect {
-          to { opacity: 1; transform: scale(1); }
+        .fedex-logo-animated {
+            font-size: clamp(3.5rem, 8vh, 5.5rem);
+            font-weight: 900;
+            display: flex;
+            justify-content: center;
+            line-height: 1;
+            margin-bottom: 0.5rem;
         }
 
-        @keyframes expandLine { to { width: 100%; } }
-
-        @keyframes slideUpEffect {
-          to { opacity: 1; transform: translateY(0); }
+        .letter {
+            display: inline-block;
+            opacity: 0;
+            animation: fallRotateBounce 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
         }
 
-        @keyframes cardEntrance {
-          from { opacity: 0; transform: translateY(30px); }
-          to { opacity: 1; transform: translateY(0); }
+        .progress-bar-wrap {
+            width: 100%;
+            height: 4px;
+            background: rgba(255,255,255,0.05);
+            margin: 2rem 0;
+            position: relative;
+            overflow: hidden;
+            opacity: 0;
+            animation: fadeIn 0.5s forwards 2.4s;
+            border-radius: 10px;
+        }
+        
+        .progress-bar-fill {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--fedex-purple), var(--fedex-orange));
+            box-shadow: 0 0 20px var(--fedex-orange);
+            transform: translateX(-50%);
+            animation: expandFromCenter 1.5s cubic-bezier(0.7, 0, 0.3, 1) 2.6s forwards;
         }
 
-        @keyframes logoPop {
-          to { opacity: 1; transform: scale(1); }
+        .toolkit-tagline {
+            color: #FF9933;
+            font-size: clamp(10px, 1.2vh, 13px);
+            font-weight: 800;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            opacity: 0;
+            animation: fadeIn 1s forwards 3.5s;
+            margin-top: 12px;
+            display: block;
         }
 
-        @keyframes nPulse {
-          0%, 100% { transform: scale(1); filter: drop-shadow(0 0 0px #fff); }
-          50% { transform: scale(1.08); filter: drop-shadow(0 0 8px rgba(255,255,255,0.4)); }
+        .ntn-text-side {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            font-style: italic;
+            font-weight: 900;
+            font-size: clamp(1.5rem, 3vh, 2.4rem);
+            margin-top: 1.5rem;
+            opacity: 0;
+            animation: fadeIn 0.8s forwards 1.8s;
         }
 
-        @keyframes accentSlide {
-          to { transform: translate(0, 0); }
+        @keyframes fallRotateBounce {
+            0% { opacity: 0; transform: translateY(-400px) rotate(var(--rot)) scale(0.5); }
+            100% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
         }
 
-        @keyframes typePortal {
-          from { width: 0; }
-          to { width: 100%; }
+        @keyframes expandFromCenter { 0% { width: 0%; } 100% { width: 100%; } }
+        @keyframes fadeIn { to { opacity: 1; } }
+        @keyframes pulse-gold {
+            0% { transform: scale(1); opacity: 1; box-shadow: 0 0 0 0 rgba(255, 215, 0, 0.7); }
+            70% { transform: scale(1.3); opacity: 0.5; box-shadow: 0 0 0 8px rgba(255, 215, 0, 0); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes drawN { to { stroke-dashoffset: 0; } }
+
+        .n-path-main {
+            stroke-dasharray: 300;
+            stroke-dashoffset: 300;
+            animation: drawN 2s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            stroke: white;
+            stroke-width: 16;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
         }
 
-        @keyframes slideInLeft {
-          from { opacity: 0; transform: translateX(-15px); }
-          to { opacity: 1; transform: translateX(0); }
+        .dot-indicator {
+            width: 8px;
+            height: 8px;
+            background: #FFD700;
+            border-radius: 50%;
+            animation: pulse-gold 2s infinite;
         }
 
-        @keyframes fadeIn {
-          to { opacity: 1; }
+        .secure-btn::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                90deg,
+                transparent,
+                rgba(255, 255, 255, 0.2),
+                transparent
+            );
+            transition: 0.6s;
+            z-index: -1;
         }
 
-        .grid-3d {
-          position: absolute;
-          width: 200%;
-          height: 200%;
-          top: -50%;
-          left: -50%;
-          background-image: 
-            linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px);
-          background-size: 60px 60px;
-          transform: rotateX(60deg) translateZ(-100px);
-          animation: gridMove 12s linear infinite;
-          z-index: 2;
-        }
-
-        .blob {
-          position: absolute;
-          width: 800px;
-          height: 800px;
-          background: radial-gradient(circle, rgba(77, 20, 140, 0.7) 0%, rgba(0, 0, 0, 0) 70%);
-          filter: blur(100px);
-          z-index: 1;
-          animation: moveBlob 20s infinite alternate;
-        }
-
-        .char {
-          display: inline-block;
-          transform: translateY(-150px);
-          opacity: 0;
-          animation: dropChar 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-        }
-
-        .char-1 { animation-delay: 0.1s; }
-        .char-2 { animation-delay: 0.2s; }
-        .char-3 { animation-delay: 0.3s; }
-        .char-4 { animation-delay: 0.4s; }
-        .char-5 { animation-delay: 0.5s; }
-
-        .login-card {
-          clip-path: polygon(8% 0, 100% 0, 100% 88%, 92% 100%, 0 100%, 0 12%);
+        .secure-btn:hover::after {
+            left: 100%;
+            transition: 0.6s ease-in-out;
         }
       ` }} />
 
       {/* Left Visual Section */}
-      <div className="flex-[1.1] flex flex-col justify-center items-center relative bg-[#2e0b55] overflow-hidden perspective-[1000px]">
-        <div className="blob"></div>
-        <div className="grid-3d"></div>
+      <div className="flex-[1.4] brand-section min-h-[40vh] lg:min-h-screen">
+        <ThreeBackground />
         
-        <div className="relative z-20 text-center text-white p-12 bg-white/5 backdrop-blur-[30px] rounded-[48px] border border-white/10 shadow-[0_50px_120px_rgba(0,0,0,0.5)] max-w-[85%] w-[540px]">
-          <div className="flex justify-center text-[80px] -tracking-[6px] font-['Arial_Black',sans-serif] leading-[0.85]">
-            <span className="char char-1 text-white">F</span>
-            <span className="char char-2 text-white">e</span>
-            <span className="char char-3 text-white">d</span>
-            <span className="char char-4 text-[#FF6600]">E</span>
-            <span className="char char-5 text-[#FF6600]">x</span>
-          </div>
-          <div 
-            className="italic text-[36px] font-black mt-5 -tracking-[1px] text-white opacity-0 scale-[1.5]"
-            style={{ animation: 'zoomInEffect 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards 0.8s' }}
-          >
-            <span className="text-orange-500">NTN</span> MANAGEMENT
+        <div className="logo-card">
+          <div className="fedex-logo-animated">
+            <span className="letter text-white l-f" style={{ '--rot': '-45deg', animationDelay: '0.2s' } as any}>F</span>
+            <span className="letter text-white l-e1" style={{ '--rot': '30deg', animationDelay: '0.4s' } as any}>e</span>
+            <span className="letter text-white l-d" style={{ '--rot': '-20deg', animationDelay: '0.3s' } as any}>d</span>
+            <span className="letter text-[#FF6600] l-e2" style={{ '--rot': '60deg', animationDelay: '0.6s' } as any}>E</span>
+            <span className="letter text-[#FF6600] l-x" style={{ '--rot': '-50deg', animationDelay: '0.5s' } as any}>x</span>
           </div>
           
-          <div 
-            className="h-[5px] w-0 my-6 rounded-full overflow-hidden flex"
-            style={{ animation: 'expandLine 1.2s ease forwards 1s' }}
-          >
-            <div className="flex-1 bg-white/80"></div>
-            <div className="flex-1 bg-[#FF6600]"></div>
+          <div className="ntn-text-side">
+            <span className="text-[#FF6600]">NTN</span>
+            <span className="text-white">MANAGEMENT</span>
           </div>
           
-          <div 
-            className="text-[16px] font-semibold text-[#FF6600] tracking-[4px] uppercase opacity-0 translate-y-[30px]"
-            style={{ animation: 'slideUpEffect 0.8s ease-out forwards 1.2s' }}
-          >
-            & SHIPMENTS TOOLKIT
+          <div className="progress-bar-wrap">
+            <div className="progress-bar-fill"></div>
           </div>
+          
+          <span className="toolkit-tagline">
+            Premium Shipments Toolkit
+          </span>
         </div>
       </div>
 
       {/* Right Login Section */}
-      <div className="flex-[0.9] flex justify-center items-center bg-white relative p-6 overflow-y-auto">
-        <div 
-          className="login-card relative z-10 w-full max-w-[420px] bg-white p-10 pt-12 pb-8 text-[#1e293b] border border-[#f1f5f9] shadow-[0_30px_70px_-15px_rgba(0,0,0,0.08)] opacity-0 translate-y-[30px]"
-          style={{ animation: 'cardEntrance 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards' }}
-        >
-          {/* Animated Logo Header */}
-          <div className="flex items-center gap-4 mb-10">
-            <div 
-              className="w-14 h-14 bg-gradient-to-br from-[#4D148C] to-[#6b21a8] rounded-[14px] flex items-center justify-center text-white shadow-[0_10px_20px_rgba(77,20,140,0.15)] relative overflow-hidden opacity-0 scale-50"
-              style={{ animation: 'logoPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards' }}
-            >
-              <span 
-                className="font-['Arial_Black',sans-serif] text-[32px] font-black leading-none text-white relative z-[2]"
-                style={{ animation: 'nPulse 2.5s ease-in-out infinite' }}
-              >
-                N
-              </span>
-              <div 
-                className="absolute bottom-0 right-0 w-[18px] h-[18px] bg-[#FF6600] rounded-tl-full translate-x-5 translate-y-5"
-                style={{ animation: 'accentSlide 0.8s ease-out forwards 0.5s' }}
-              ></div>
+      <div className="flex-1 flex items-center justify-center p-8 bg-white z-[5] min-h-[60vh] lg:min-h-screen">
+        <div className="w-full max-w-[380px] transform scale-[clamp(0.8,1vh,1)]">
+          {/* Header Top */}
+          <div className="flex flex-col items-center justify-center mb-[clamp(1rem,3vh,2rem)] gap-2">
+            <div className="flex items-center gap-3">
+              <div className="relative w-[55px] h-[55px] bg-gradient-to-br from-[#4D148C] to-[#2a0a52] rounded-[14px] flex items-center justify-center shadow-[0_8px_20px_rgba(77,20,140,0.25)] overflow-hidden">
+                <svg className="w-7 h-7 z-[2]" viewBox="0 0 100 100">
+                  <path className="n-path-main" d="M 20 80 L 20 20 L 80 80 L 80 20" />
+                </svg>
+              </div>
+              <div className="bg-gradient-to-br from-[#4D148C] to-[#6B21A8] px-[18px] py-2 rounded-[12px] flex items-center gap-[10px] shadow-[0_4px_12px_rgba(77,20,140,0.15)]">
+                <div className="dot-indicator"></div>
+                <span className="text-[18px] font-[900] color-white tracking-[0.5px] leading-none text-white">NTN SYSTEM</span>
+              </div>
             </div>
-            <div className="flex flex-col">
-              <div 
-                className="font-extrabold text-2xl leading-none text-[#0f172a] -tracking-[0.8px] opacity-0 translate-y-2"
-                style={{ animation: 'slideUpEffect 0.5s ease-out forwards 0.4s' }}
-              >
-                NTN SYSTEM
+            <span className="font-[800] text-[12px] text-[#FF6600] uppercase tracking-[4px] mt-0.5 inline-block">ADVANCE PORTAL</span>
+          </div>
+
+          {/* Login Heading */}
+          <div className="flex items-center mb-[clamp(1rem,2vh,2rem)] relative">
+            <div className="flex items-center gap-[10px]">
+              <div className={`w-11 h-11 rounded-[10px] flex items-center justify-center shadow-[0_4px_12px_rgba(255,102,0,0.25)] transition-all duration-400 ${isSuccess ? 'bg-[#22c55e] scale-110' : 'bg-[#FF6600]'}`}>
+                {isSuccess ? <LockOpen size={20} className="text-white" /> : <Lock size={20} className="text-white" />}
               </div>
-              <div 
-                className="text-[12px] font-semibold text-[#FF6600] tracking-[2.5px] uppercase mt-1 whitespace-nowrap overflow-hidden w-0 border-r-2 border-transparent"
-                style={{ animation: 'typePortal 1.2s steps(20) forwards 0.8s' }}
-              >
-                Digital Portal
-              </div>
+              <h1 className="text-[clamp(24px,4vh,32px)] font-[900] text-[#0a1629] tracking-[-1.5px] uppercase">
+                <span className="text-[#FF6600]">{isResetMode ? 'R' : (isLogin ? 'L' : 'S')}</span>
+                {isResetMode ? 'ESET' : (isLogin ? 'OGIN' : 'IGN UP')}
+              </h1>
             </div>
           </div>
-          
-          <h1 
-            className="text-[28px] font-extrabold text-[#0f172a] mb-6 uppercase -tracking-[1.2px] border-l-[6px] border-[#FF6600] pl-[18px] opacity-0 -translate-x-[15px]"
-            style={{ animation: 'slideInLeft 0.5s ease-out forwards 0.6s' }}
-          >
-            {isResetMode ? 'RESET' : (isLogin ? 'LOGIN' : 'SIGN UP')}
-          </h1>
 
           {error && (
             <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700 text-sm font-medium rounded-r-xl animate-shake">
@@ -234,92 +373,95 @@ export default function LoginPage({
 
           {!isResetMode ? (
             <form className="space-y-5" onSubmit={handleLogin}>
-              <div className="mb-5">
-                <label className="text-[12px] font-bold uppercase text-slate-500 ml-1 mb-2 block tracking-wider">Email Address</label>
-                <input 
-                  type="email" 
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#f8fafc] border border-[#e2e8f0] p-[18px_22px] rounded-[18px] text-[#0f172a] text-[15px] outline-none transition-all focus:border-[#4D148C] focus:bg-white focus:shadow-[0_0_0_5px_rgba(77,20,140,0.04)]" 
-                  placeholder="name@example.com" 
-                  required
-                />
+              <div>
+                <label className="text-[11px] font-[800] color-[#4A5568] uppercase tracking-[1px] mb-1.5 block">Email Address</label>
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Mail size={18} />
+                  </div>
+                  <input 
+                    type="email" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-12 pr-4 py-[clamp(0.8rem,1.2vh,1.1rem)] bg-[#f8fafc] border-2 border-[#edf2f7] rounded-[16px] outline-none transition-all focus:border-[#4D148C] focus:bg-white" 
+                    placeholder="admin@gmail.com" 
+                    required
+                  />
+                </div>
               </div>
               
-              <div className="mb-5">
-                <div className="flex justify-between items-center mb-2 px-1">
-                  <label className="text-[12px] font-bold uppercase text-slate-500 block tracking-wider">Password</label>
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-[11px] font-[800] color-[#4A5568] uppercase tracking-[1px] block">Password</label>
                   {isLogin && (
                     <span 
                       onClick={handleForgotPassword}
-                      className="text-[12px] font-bold text-purple-700 cursor-pointer hover:text-[#FF6600] transition-colors"
+                      className="text-[11px] font-[800] text-[#4D148C] cursor-pointer hover:text-[#FF6600] transition-colors uppercase tracking-[1px]"
                     >
                       Forgot?
                     </span>
                   )}
                 </div>
-                <input 
-                  type="password" 
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#f8fafc] border border-[#e2e8f0] p-[18px_22px] rounded-[18px] text-[#0f172a] text-[15px] outline-none transition-all focus:border-[#4D148C] focus:bg-white focus:shadow-[0_0_0_5px_rgba(77,20,140,0.04)]" 
-                  placeholder="••••••••" 
-                  required
-                />
+                <div className="relative">
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <Key size={18} />
+                  </div>
+                  <input 
+                    type="password" 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-12 pr-4 py-[clamp(0.8rem,1.2vh,1.1rem)] bg-[#f8fafc] border-2 border-[#edf2f7] rounded-[16px] outline-none transition-all focus:border-[#4D148C] focus:bg-white" 
+                    placeholder="••••••••" 
+                    required
+                  />
+                </div>
               </div>
 
               <button 
                 type="submit"
                 disabled={loading}
-                className="w-full p-5 bg-[#4D148C] text-white rounded-[18px] font-bold text-[16px] uppercase tracking-[1.8px] mt-6 shadow-[0_15px_30px_rgba(77,20,140,0.2)] transition-all hover:-translate-y-1 hover:bg-[#3c0f6e] hover:shadow-[0_20px_40px_rgba(77,20,140,0.25)] border-none cursor-pointer relative overflow-hidden disabled:opacity-70"
+                className="secure-btn w-full bg-[#4D148C] text-white p-[1.1rem] rounded-[15px] font-[800] uppercase tracking-[1.5px] mt-4 cursor-pointer shadow-[0_8px_15px_rgba(77,20,140,0.2)] transition-all duration-400 hover:bg-[#3e0e72] hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(77,20,140,0.4)] relative overflow-hidden flex items-center justify-center gap-[10px] z-[1] disabled:opacity-70"
               >
+                {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : (isLogin ? <ShieldCheck size={20} /> : <UserPlus size={20} />)}
                 {loading ? 'Processing...' : (isLogin ? 'Secure Access' : 'Create Account')}
               </button>
 
-              <div className="relative my-8">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-slate-200"></div>
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-white px-4 text-slate-500 font-bold tracking-widest">Or continue with</span>
-                </div>
+              <div className="flex items-center my-6">
+                <div className="flex-1 h-[1px] bg-[#FF6600]/20"></div>
+                <span className="mx-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Auth</span>
+                <div className="flex-1 h-[1px] bg-[#4D148C]/20"></div>
               </div>
 
               <button 
                 type="button"
                 onClick={handleGoogleLogin}
-                className="w-full p-4 bg-white border-2 border-slate-100 text-slate-700 rounded-[18px] font-bold text-[14px] uppercase tracking-[1px] flex items-center justify-center gap-3 transition-all hover:bg-slate-50 hover:border-slate-200"
+                className="w-full bg-white border-2 border-[#edf2f7] p-[0.8rem] rounded-[18px] flex items-center justify-center gap-3 font-[900] text-[12px] text-[#1a202c] uppercase cursor-pointer transition-all duration-300 hover:bg-[#fdfdfd] hover:border-[#cbd5e1] hover:-translate-y-0.5 hover:shadow-[0_5px_15px_rgba(0,0,0,0.05)] active:scale-95"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/>
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                </svg>
+                <Chrome size={18} className="text-[#4285F4]" />
                 Google Account
               </button>
             </form>
           ) : (
             <form className="space-y-5" onSubmit={handleConfirmResetPassword}>
-              <div className="mb-5">
-                <label className="text-[12px] font-bold uppercase text-slate-500 ml-1 mb-2 block tracking-wider">Reset Code</label>
+              <div>
+                <label className="text-[11px] font-[800] color-[#4A5568] uppercase tracking-[1px] mb-1.5 block">Reset Code</label>
                 <input 
                   type="text" 
                   value={resetCode}
                   onChange={(e) => setResetCode(e.target.value)}
-                  className="w-full bg-[#f8fafc] border border-[#e2e8f0] p-[18px_22px] rounded-[18px] text-[#0f172a] text-[15px] outline-none transition-all focus:border-[#4D148C] focus:bg-white focus:shadow-[0_0_0_5px_rgba(77,20,140,0.04)]" 
+                  className="w-full px-4 py-[clamp(0.8rem,1.2vh,1.1rem)] bg-[#f8fafc] border-2 border-[#edf2f7] rounded-[16px] outline-none transition-all focus:border-[#4D148C] focus:bg-white" 
                   placeholder="Enter code from email" 
                   required
                 />
               </div>
               
-              <div className="mb-5">
-                <label className="text-[12px] font-bold uppercase text-slate-500 ml-1 mb-2 block tracking-wider">New Password</label>
+              <div>
+                <label className="text-[11px] font-[800] color-[#4A5568] uppercase tracking-[1px] mb-1.5 block">New Password</label>
                 <input 
                   type="password" 
                   value={resetNewPassword}
                   onChange={(e) => setResetNewPassword(e.target.value)}
-                  className="w-full bg-[#f8fafc] border border-[#e2e8f0] p-[18px_22px] rounded-[18px] text-[#0f172a] text-[15px] outline-none transition-all focus:border-[#4D148C] focus:bg-white focus:shadow-[0_0_0_5px_rgba(77,20,140,0.04)]" 
+                  className="w-full px-4 py-[clamp(0.8rem,1.2vh,1.1rem)] bg-[#f8fafc] border-2 border-[#edf2f7] rounded-[16px] outline-none transition-all focus:border-[#4D148C] focus:bg-white" 
                   placeholder="••••••••" 
                   required
                 />
@@ -328,15 +470,16 @@ export default function LoginPage({
               <button 
                 type="submit"
                 disabled={loading}
-                className="w-full p-5 bg-emerald-600 text-white rounded-[18px] font-bold text-[16px] uppercase tracking-[1.8px] mt-6 shadow-[0_15px_30px_rgba(16,185,129,0.2)] transition-all hover:-translate-y-1 hover:bg-emerald-700 hover:shadow-[0_20px_40px_rgba(16,185,129,0.25)] border-none cursor-pointer relative overflow-hidden disabled:opacity-70"
+                className="secure-btn w-full bg-[#22c55e] text-white p-[1.1rem] rounded-[15px] font-[800] uppercase tracking-[1.5px] mt-4 cursor-pointer shadow-[0_8px_15px_rgba(34,197,94,0.2)] transition-all duration-400 hover:bg-[#16a34a] hover:-translate-y-1 hover:shadow-[0_15px_30px_rgba(34,197,94,0.4)] relative overflow-hidden flex items-center justify-center gap-[10px] z-[1] disabled:opacity-70"
               >
+                {loading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <ShieldCheck size={20} />}
                 {loading ? 'Processing...' : 'Update Password'}
               </button>
 
               <button 
                 type="button"
                 onClick={() => setIsResetMode(false)}
-                className="w-full mt-4 text-sm text-slate-500 hover:text-slate-800 font-bold uppercase tracking-widest transition-colors"
+                className="w-full mt-4 text-[11px] text-slate-500 hover:text-slate-800 font-[800] uppercase tracking-[1px] transition-colors"
               >
                 Back to Login
               </button>
@@ -344,10 +487,10 @@ export default function LoginPage({
           )}
 
           {!isResetMode && (
-            <div className="text-center mt-9 text-sm text-[#64748b]">
+            <div className="text-center mt-[clamp(1.5rem,4vh,3.5rem)] text-sm text-[#64748b]">
               {isLogin ? "Don't have an account?" : "Already have an account?"} <span 
                 onClick={() => setIsLogin(!isLogin)}
-                className="text-[#4D148C] font-bold cursor-pointer hover:text-[#FF6600] transition-colors"
+                className="text-[#4D148C] font-[800] cursor-pointer hover:text-[#FF6600] transition-colors"
               >
                 {isLogin ? "Create one" : "Login"}
               </span>
@@ -355,19 +498,13 @@ export default function LoginPage({
           )}
 
           {/* Footer Credit */}
-          <div 
-            className="mt-10 text-center border-t border-[#f1f5f9] pt-7 opacity-0"
-            style={{ animation: 'fadeIn 0.8s ease forwards 1.2s' }}
-          >
-            <div className="text-[12px] color-[#94a3b8] font-semibold mb-1">© 2026</div>
-            <div className="text-[15px] font-extrabold text-[#4D148C] tracking-[1.2px] uppercase">NTN MANAGEMENT SYSTEM</div>
-            <div className="mt-2 text-[11px] text-[#64748b] font-medium">
-              Created by <span className="text-[#FF6600] font-extrabold uppercase tracking-[0.8px]">IMRAN AHMED</span>
-            </div>
+          <div className="mt-[clamp(1.5rem,4vh,3.5rem)] text-center">
+            <span className="text-[14px] font-[900] text-[#4D148C] mb-0.5 block">© 2026</span>
+            <p className="text-[12px] font-[900] text-[#4D148C] uppercase">NTN Management System</p>
+            <p className="text-[9px] font-[700] text-[#718096] uppercase">Created by <span className="text-[#FF6600] font-[900]">IMRAN AHMED</span></p>
           </div>
         </div>
       </div>
     </div>
   );
 }
-

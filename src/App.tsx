@@ -161,7 +161,7 @@ function AppContent() {
     if (showSplash) {
       const timer = setTimeout(() => {
         setShowSplash(false);
-      }, 7000); // Increased to 7 seconds to ensure animation completes
+      }, 4000); // Changed to 4 seconds as requested
       return () => clearTimeout(timer);
     }
   }, [showSplash]);
