@@ -1325,7 +1325,7 @@ function AppContent() {
       // 2. Customs Value must be < 500
       if (customsValue >= 500) return false;
 
-      // 3. Name or Tax ID must not contain NTN or CNIC
+      // 3. Company, Name or Tax ID must not contain NTN or CNIC
       const hasNtnOrCnic = (text: string) => {
         if (!text) return false;
         const lowerText = text.toLowerCase();
@@ -1336,24 +1336,18 @@ function AppContent() {
                cnicPattern.test(text);
       };
 
-      if (hasNtnOrCnic(name) || hasNtnOrCnic(taxId)) return false;
-
-      // Special handling for Company: if it has NTN/CNIC, only skip if it's NOT Sialkot or starts with 99
-      const isSialkot = sialkotKeywords.some(k => city.includes(k));
-      const startsWith99 = ref.startsWith('99');
-
-      if (hasNtnOrCnic(company)) {
-        if (!isSialkot || startsWith99) return false;
-      }
+      if (hasNtnOrCnic(company) || hasNtnOrCnic(name) || hasNtnOrCnic(taxId)) return false;
 
       // 4. Company must not end with specific suffixes (or contain e-form)
       const hasInvalidSuffix = invalidSuffixes.some(regex => regex.test(company));
       if (hasInvalidSuffix) return false;
 
       // 5. Shpr City must be Sialkot related
+      const isSialkot = sialkotKeywords.some(k => city.includes(k));
       if (!isSialkot) return false;
 
       // 6. Shipper Ref must not start with 99 or be 9099
+      const startsWith99 = ref.startsWith('99');
       if (startsWith99 || ref === '9099') return false;
 
       return true;
