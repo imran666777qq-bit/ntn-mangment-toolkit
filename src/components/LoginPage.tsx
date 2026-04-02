@@ -143,7 +143,12 @@ export default function LoginPage({
   }, [successMessage]);
 
   return (
-    <div className="h-screen w-full flex flex-col lg:flex-row bg-[#0a0212] overflow-hidden font-['Inter',sans-serif]">
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 1 }}
+      className="h-screen w-full flex flex-col lg:flex-row bg-[#0a0212] overflow-hidden font-['Inter',sans-serif]"
+    >
       <style dangerouslySetInnerHTML={{ __html: `
         :root {
           --fedex-purple: #4D148C;
@@ -303,7 +308,12 @@ export default function LoginPage({
       <div className="flex-[1.4] brand-section min-h-[40vh] lg:min-h-screen">
         <ThreeBackground />
         
-        <div className="logo-card">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.8, y: 50 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 1, delay: 0.5, ease: "easeOut" }}
+          className="logo-card"
+        >
           <div className="fedex-logo-animated">
             <span className="letter text-white l-f" style={{ '--rot': '-45deg', animationDelay: '0.2s' } as any}>F</span>
             <span className="letter text-white l-e1" style={{ '--rot': '30deg', animationDelay: '0.4s' } as any}>e</span>
@@ -324,24 +334,32 @@ export default function LoginPage({
           <span className="toolkit-tagline">
             Premium Shipments Toolkit
           </span>
-        </div>
+        </motion.div>
       </div>
 
       {/* Right Login Section */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-white z-[5] min-h-[60vh] lg:min-h-screen">
+      <motion.div 
+        initial={{ x: 100, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 0.8, delay: 0.2 }}
+        className="flex-1 flex items-center justify-center p-8 bg-white z-[5] min-h-[60vh] lg:min-h-screen"
+      >
         <div className="w-full max-w-[380px] transform scale-[clamp(0.8,1vh,1)]">
           {/* Header Top */}
-          <div className="flex flex-col items-center justify-center mb-[clamp(1rem,3vh,2rem)] gap-2">
-            <div className="flex items-center gap-3">
-              <div className="relative w-[55px] h-[55px] bg-gradient-to-br from-[#4D148C] to-[#2a0a52] rounded-[14px] flex items-center justify-center shadow-[0_8px_20px_rgba(77,20,140,0.25)] overflow-hidden">
-                <svg className="w-7 h-7 z-[2]" viewBox="0 0 100 100">
-                  <path className="n-path-main" d="M 20 80 L 20 20 L 80 80 L 80 20" />
-                </svg>
-              </div>
-              <div className="bg-gradient-to-br from-[#4D148C] to-[#6B21A8] px-[18px] py-2 rounded-[12px] flex items-center gap-[10px] shadow-[0_4px_12px_rgba(77,20,140,0.15)]">
-                <div className="dot-indicator"></div>
-                <span className="text-[18px] font-[900] color-white tracking-[0.5px] leading-none text-white">NTN SYSTEM</span>
-              </div>
+          <div className="flex flex-col items-center justify-center mb-[clamp(1rem,3vh,2rem)] gap-4">
+            <div className="fedex-logo-badge scale-90">
+              <span className="badge-letter ntn-text" style={{ animationDelay: '0.1s' }}>N</span>
+              <span className="badge-letter ntn-text" style={{ animationDelay: '0.2s' }}>T</span>
+              <span className="badge-letter ntn-text" style={{ animationDelay: '0.3s' }}>N</span>
+              
+              <div className="dual-tone-dot"></div>
+              
+              <span className="badge-letter system-text" style={{ animationDelay: '0.5s' }}>S</span>
+              <span className="badge-letter system-text" style={{ animationDelay: '0.6s' }}>Y</span>
+              <span className="badge-letter system-text" style={{ animationDelay: '0.7s' }}>S</span>
+              <span className="badge-letter system-text" style={{ animationDelay: '0.8s' }}>T</span>
+              <span className="badge-letter system-text" style={{ animationDelay: '0.9s' }}>E</span>
+              <span className="badge-letter system-text" style={{ animationDelay: '1.0s' }}>M</span>
             </div>
             <span className="font-[800] text-[12px] text-[#FF6600] uppercase tracking-[4px] mt-0.5 inline-block">ADVANCE PORTAL</span>
           </div>
@@ -504,7 +522,7 @@ export default function LoginPage({
             <p className="text-[9px] font-[700] text-[#718096] uppercase">Created by <span className="text-[#FF6600] font-[900]">IMRAN AHMED</span></p>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
